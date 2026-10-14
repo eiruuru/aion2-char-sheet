@@ -1,0 +1,7 @@
+Aion 2 Progress
+
+Run Aion2Progress.exe from this folder. Leave the other files here. The app needs them.
+
+Your roster is saved as aion2-tracker.json in this same folder. "Keep this window above the game" is saved as aion2-window.json.
+
+The app reads public character pages. Odyle, Qina, and the other wallet numbers are typed in, then they count forward on their clocks. It does not attach to the game.
