@@ -42,6 +42,15 @@ export function TrashIcon() {
   )
 }
 
+export function UpdateIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 2.2v7.2M5.2 6.8 8 9.6l2.8-2.8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3.2 12.8h9.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function RefreshIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">

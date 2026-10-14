@@ -1,7 +1,7 @@
 {
   "name": "aion2-tracker",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Local Aion 2 character sheet. Public profiles supply gear, skills, and Daevanion. Dailies, goals, and the Odyle clock stay on this device.",
   "type": "module",
   "main": "electron/main.cjs",
@@ -55,6 +55,9 @@
       "en-US"
     ],
     "afterPack": "electron/after-pack.cjs",
+    "releaseInfo": {
+      "releaseNotes": "The checklist is sorted by priority, with a full row of boxes for each task. Class guide advice checks once a day. A newer version can be installed from inside the app."
+    },
     "publish": {
       "provider": "github",
       "owner": "eiruuru",

@@ -4,10 +4,19 @@ import { upcomingBosses, dailyKey, inWeeklyBurnWindow, nextDailyReset, nextWeekl
 const NEAR_RESET_MS = 6 * 60 * 60 * 1000
 const BOSS_SOON_MS = 2 * 60 * 60 * 1000
 const GEAR_GATE = 1400
+const ABYSS_GATE = 1000
 const TRANSCENDENCE_GATE = 1600
 
 export type Cadence = "daily" | "weekly" | "season"
 export type TaskTag = "core" | "optional"
+export type Priority = "critical" | "high" | "medium" | "low"
+
+export const PRIORITY_RANK: Record<Priority, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+}
 export type Urgency = "do-now" | "can-wait" | "before-wednesday" | "steady" | "done"
 export type Assign =
   | "everyone"
@@ -33,6 +42,9 @@ type TaskDef = {
   cadence: Cadence
   scope: "character" | "server"
   tag: TaskTag
+  priority: Priority
+  /** Shown as a reminder, with no boxes to check. */
+  note?: boolean
   notes: string
   cap: number
   memberCap?: number
@@ -47,39 +59,33 @@ type TaskDef = {
   icon?: string
 }
 
-export const TASKS: TaskDef[] = [
-  { id: "nightmare", name: "Nightmare", cadence: "daily", scope: "character", tag: "core", cap: 2, bank: 14, refillMs: null, accrue: 2, stockBoxes: true, assign: "everyone", icon: DUNGEON_ICON, notes: "2 a day, holds 14. Spent only on a clear." },
-  { id: "supply-daily", name: "Supply Request", cadence: "daily", scope: "character", tag: "core", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: MISSION_ICON, notes: "Daily delivery. Does not bank." },
-  { id: "qina", name: "Open world Qina", cadence: "daily", scope: "character", tag: "core", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: EXPLORE_ICON, notes: "1 million Qina. Mark 1 when that character is capped." },
-  { id: "attendance", name: "Attendance reward", cadence: "daily", scope: "character", tag: "core", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: MISSION_ICON, notes: "Claim the login reward." },
-  { id: "transcendence", name: "Transcendence", cadence: "daily", scope: "character", tag: "optional", cap: 1, bank: 14, refillMs: 12 * 60 * 60 * 1000, assign: "main-il-1600", notes: "One charge every 12 hours, holds 14. Main only, from item level 1,600." },
-  { id: "rift", name: "Spacetime Rift", cadence: "daily", scope: "character", tag: "optional", cap: 1, bank: null, refillMs: 3 * 60 * 60 * 1000, assign: "everyone", icon: RIFT_ICON, notes: "Verteron, Eltnen, Altgard, or Morheim. About a 3 hour cycle." },
-  { id: "duty", name: "Duty Missions", cadence: "daily", scope: "server", tag: "core", cap: 5, bank: null, refillMs: null, assign: "main", icon: MISSION_ICON, notes: "5 payouts a day for the server. Shared by every character on that server." },
-  { id: "fissure-day", name: "Daily Dungeon", cadence: "daily", scope: "server", tag: "core", cap: 2, bank: null, refillMs: null, assign: "main", icon: DUNGEON_ICON, notes: "Unknown Fissure. 14 entries for the server this week. Instant clear tickets are in Substance Morph during the server transfer." },
-  { id: "dimension", name: "Dimension key", cadence: "daily", scope: "server", tag: "core", cap: 1, bank: 7, refillMs: null, accrue: 1, stockBoxes: true, assign: "main", icon: DUNGEON_ICON, notes: "1 a day, holds 7. Shared by the server." },
-  { id: "shugo", name: "Shugo Festival keys", cadence: "daily", scope: "server", tag: "core", cap: 3, bank: 12, memberBank: 21, refillMs: null, accrue: 3, stockBoxes: true, assign: "main", icon: SHOP_ICON, notes: "3 a day, shared. Give them to whoever needs that shop." },
-  { id: "field-bosses", name: "Field bosses", cadence: "daily", scope: "server", tag: "core", cap: 4, bank: null, refillMs: null, assign: "field-bosses", icon: EXPLORE_ICON, notes: "Gartua, then Lagta, Kashapa, Dartan. A gearing alt takes them until item level 1,400." },
-  { id: "ascension", name: "Ascension Trial", cadence: "weekly", scope: "character", tag: "core", cap: 3, bank: null, refillMs: null, assign: "everyone", icon: DUNGEON_ICON, notes: "3 entries. Does not bank past Wednesday." },
-  { id: "corridor", name: "Abyss Corridor", cadence: "weekly", scope: "character", tag: "core", cap: 3, bank: null, refillMs: null, assign: "everyone", icon: DUNGEON_ICON, notes: "3 a week, when the corridor is open." },
-  { id: "subjugation", name: "Subjugation tickets", cadence: "weekly", scope: "character", tag: "core", cap: 3, bank: null, refillMs: null, assign: "everyone", icon: DUNGEON_ICON, notes: "3 tickets for 4-player dungeons." },
-  { id: "supply-weekly", name: "Supply Request weekly", cadence: "weekly", scope: "character", tag: "core", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: MISSION_ICON, notes: "Weekly delivery." },
-  { id: "odyle-craft-char", name: "Odyle craft", cadence: "weekly", scope: "character", tag: "core", cap: 4, bank: null, refillMs: null, assign: "everyone", notes: "4 crafts on this character, then 16 shared by the server." },
-  { id: "odyle-buy-char", name: "Wind Breeze Odyle", cadence: "weekly", scope: "character", tag: "optional", cap: 20, bank: null, refillMs: null, assign: "membership", icon: SHOP_ICON, notes: "20 per character during the server transfer. The weekly server limit is removed." },
-  { id: "daeva-pass", name: "Daeva Pass EXP", cadence: "weekly", scope: "character", tag: "core", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: MISSION_ICON, notes: "Season cap 50,000 pass EXP. Mark 1 when capped. Main first." },
-  { id: "season", name: "Season missions", cadence: "weekly", scope: "character", tag: "core", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: MISSION_ICON, notes: "Pays at the weekly reset. Spending 1 hour in the Abyss and defeating Nahma once also award Abyss Entry Stones." },
-  { id: "raid-ludra", name: "Raid: Ludra", cadence: "weekly", scope: "character", tag: "core", cap: 1, bank: null, refillMs: null, assign: "raids", icon: DUNGEON_ICON, notes: "1 final-boss kill. Main until an alt is item level 1,400." },
-  { id: "raid-corroded", name: "Raid: Corroded Facility", cadence: "weekly", scope: "character", tag: "core", cap: 2, bank: null, refillMs: null, assign: "raids", icon: DUNGEON_ICON, notes: "2 final-boss kills." },
-  { id: "raid-chalice", name: "Raid: Chalice of Muspel", cadence: "weekly", scope: "character", tag: "core", cap: 2, bank: null, refillMs: null, assign: "raids", icon: DUNGEON_ICON, notes: "2 final-boss kills." },
-  { id: "krao", name: "Krao Cave", cadence: "weekly", scope: "character", tag: "core", cap: 7, bank: null, refillMs: null, assign: "alt-first", icon: DUNGEON_ICON, notes: "7 reward counts. 20-Odyle cubes for Qina and Wrathful Mind. Alt first." },
-  { id: "urugugu", name: "Urugugu Canyon", cadence: "weekly", scope: "character", tag: "core", cap: 7, bank: null, refillMs: null, assign: "alt-first", icon: DUNGEON_ICON, notes: "7 reward counts. Alt first." },
-  { id: "abyss", name: "Abyss", cadence: "weekly", scope: "character", tag: "optional", cap: 7, bank: null, refillMs: null, assign: "main", notes: "7 hours total across the Abyss. Membership does not add more." },
-  { id: "growth-graveyard", name: "Silent Graveyard", cadence: "weekly", scope: "character", tag: "optional", cap: 7, bank: null, refillMs: null, assign: "alt-only", icon: DUNGEON_ICON, notes: "Hours inside. Alt growth." },
-  { id: "growth-fafnite", name: "Fafnite Amphitheater", cadence: "weekly", scope: "character", tag: "optional", cap: 7, bank: null, refillMs: null, assign: "alt-only", icon: DUNGEON_ICON, notes: "Hours inside. Alt growth." },
-  { id: "battlefield", name: "Battlefield wins", cadence: "weekly", scope: "character", tag: "optional", cap: 3, bank: null, refillMs: null, assign: "everyone", icon: BATTLE_ICON, notes: "Victory reward 3 times." },
-  { id: "shops", name: "Weekly shops", cadence: "weekly", scope: "character", tag: "optional", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: SHOP_ICON, notes: "Wind Breeze, Nightmare shop, and the rest." },
+const TASK_INPUT: Array<Omit<TaskDef, "priority"> & { priority?: Priority }> = [
+  { id: "transcendence", name: "Transcendence", cadence: "daily", scope: "character", tag: "core", priority: "critical", cap: 1, bank: 14, refillMs: 12 * 60 * 60 * 1000, assign: "main-il-1600", notes: "One charge every 12 hours, holds 14. Main only, from gear score 1,600." },
+  { id: "conquest", name: "Conquest Dungeons", cadence: "daily", scope: "character", tag: "core", priority: "critical", note: true, cap: 0, bank: null, refillMs: null, assign: "everyone", icon: DUNGEON_ICON, notes: "Run while Odyle remains. No daily clear." },
+  { id: "nightmare", name: "Nightmare", cadence: "daily", scope: "character", tag: "core", priority: "high", cap: 2, bank: 14, refillMs: null, accrue: 2, stockBoxes: true, assign: "everyone", icon: DUNGEON_ICON, notes: "2 a day, holds 14. Spent only on a clear." },
+  { id: "duty", name: "Duty Missions", cadence: "daily", scope: "server", tag: "core", priority: "high", cap: 5, bank: null, refillMs: null, assign: "main", icon: MISSION_ICON, notes: "5 payouts a day for the server. Shared by every character on that server." },
+  { id: "field-bosses", name: "Field bosses", cadence: "daily", scope: "server", tag: "core", priority: "high", cap: 4, bank: null, refillMs: null, assign: "field-bosses", icon: EXPLORE_ICON, notes: "In order: Gartua, Lagta, Kashapa, Dartan. The lowest character under gear score 1,400 takes them." },
+  { id: "shugo", name: "Shugo Festival", cadence: "daily", scope: "server", tag: "core", priority: "medium", cap: 3, bank: 12, memberBank: 21, refillMs: null, accrue: 3, stockBoxes: true, assign: "main", icon: SHOP_ICON, notes: "3 a day, shared. Holds 12, or 21 with membership." },
+  { id: "dimension", name: "Dimensional Invasion", cadence: "daily", scope: "server", tag: "core", priority: "medium", cap: 1, bank: 7, refillMs: null, accrue: 1, stockBoxes: true, assign: "main", icon: DUNGEON_ICON, notes: "1 a day, holds 7. Shared by the server." },
+  { id: "rift", name: "Spacetime Rift", cadence: "daily", scope: "character", tag: "core", priority: "low", cap: 1, bank: null, refillMs: 3 * 60 * 60 * 1000, assign: "everyone", icon: RIFT_ICON, notes: "Verteron, Eltnen, Altgard, or Morheim. About a 3 hour cycle." },
+  { id: "fissure-day", name: "Daily Dungeon", cadence: "daily", scope: "server", tag: "core", priority: "low", cap: 2, bank: null, refillMs: null, assign: "main", icon: DUNGEON_ICON, notes: "Unknown Fissure. 14 entries for the server this week. Instant clear tickets are in Substance Morph during the server transfer." },
+  { id: "qina", name: "Open world Qina", cadence: "daily", scope: "character", tag: "core", priority: "low", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: EXPLORE_ICON, notes: "1 million Qina. Mark 1 when that character is capped." },
+  { id: "daeva-pass", name: "Pass EXP", cadence: "weekly", scope: "character", tag: "core", priority: "critical", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: MISSION_ICON, notes: "Season cap 50,000 pass EXP. Mark 1 when capped. Main first." },
+  { id: "season", name: "Season missions", cadence: "weekly", scope: "character", tag: "core", priority: "critical", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: MISSION_ICON, notes: "Pays at the weekly reset. Spending 1 hour in the Abyss and defeating Nahma once also award Abyss Entry Stones." },
+  { id: "odyle-craft-char", name: "Odyle crafting", cadence: "weekly", scope: "character", tag: "core", priority: "critical", cap: 4, bank: null, refillMs: null, assign: "everyone", notes: "4 crafts on this character, then 16 shared by the server." },
+  { id: "odyle-buy-char", name: "Odyle purchase", cadence: "weekly", scope: "server", tag: "core", priority: "critical", cap: 20, bank: null, refillMs: null, assign: "membership", icon: SHOP_ICON, notes: "20 for the server. Membership only." },
+  { id: "ascension", name: "Ascension Trial", cadence: "weekly", scope: "character", tag: "core", priority: "critical", cap: 3, bank: null, refillMs: null, assign: "everyone", icon: DUNGEON_ICON, notes: "3 entries. Does not carry past Wednesday." },
+  { id: "shops", name: "Shop weekly limited items", cadence: "weekly", scope: "character", tag: "core", priority: "high", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: SHOP_ICON, notes: "Wind Breeze, Nightmare shop, and the rest." },
+  { id: "corridor", name: "Abyss Corridor", cadence: "weekly", scope: "character", tag: "core", priority: "high", cap: 3, bank: null, refillMs: null, assign: "everyone", icon: DUNGEON_ICON, notes: "3 a week, when the corridor is open." },
+  { id: "subjugation", name: "Subjugation tickets", cadence: "weekly", scope: "character", tag: "core", priority: "high", cap: 3, bank: null, refillMs: null, assign: "everyone", icon: DUNGEON_ICON, notes: "3 tickets for 4-player dungeons." },
+  { id: "abyss", name: "Abyss farming and missions", cadence: "weekly", scope: "character", tag: "core", priority: "medium", cap: 7, bank: null, refillMs: null, assign: "main", notes: "7 hours total across the Abyss. Main only, from gear score 1,000. Membership does not add hours." },
+  { id: "raid-ludra", name: "Raid: Ludra", cadence: "weekly", scope: "character", tag: "core", priority: "medium", cap: 1, bank: null, refillMs: null, assign: "raids", icon: DUNGEON_ICON, notes: "Hidden until this raid is on global." },
+  { id: "raid-corroded", name: "Raid: Corroded Facility", cadence: "weekly", scope: "character", tag: "core", priority: "medium", cap: 2, bank: null, refillMs: null, assign: "raids", icon: DUNGEON_ICON, notes: "Hidden until this raid is on global." },
+  { id: "raid-chalice", name: "Raid: Chalice of Muspel", cadence: "weekly", scope: "character", tag: "core", priority: "medium", cap: 2, bank: null, refillMs: null, assign: "raids", icon: DUNGEON_ICON, notes: "Hidden until this raid is on global." },
+  { id: "battlefield", name: "Battlefield wins", cadence: "weekly", scope: "character", tag: "core", priority: "low", cap: 3, bank: null, refillMs: null, assign: "everyone", icon: BATTLE_ICON, notes: "Victory reward 3 times." },
+  { id: "command", name: "Command Missions", cadence: "weekly", scope: "server", tag: "core", priority: "low", cap: 12, bank: null, refillMs: null, assign: "main", icon: MISSION_ICON, notes: "Up to 12 from the capital merchant. Shared by the server." },
   { id: "fissure-week", name: "Daily Dungeon this week", cadence: "weekly", scope: "server", tag: "core", cap: 14, bank: null, refillMs: null, assign: "main", icon: DUNGEON_ICON, notes: "Unknown Fissure. 14 entries for the server. Does not carry past Wednesday." },
   { id: "odyle-craft-server", name: "Odyle craft, server", cadence: "weekly", scope: "server", tag: "core", cap: 16, bank: null, refillMs: null, assign: "main", notes: "16 for the server. Shown after each character's own 4." },
-  { id: "command", name: "Command Missions", cadence: "weekly", scope: "server", tag: "core", cap: 12, bank: null, refillMs: null, assign: "main", icon: MISSION_ICON, notes: "Up to 12 from the capital merchant. Shared by the server." },
   { id: "season-abyss-hunt", name: "Halloween: Abyss hunt", cadence: "season", scope: "server", tag: "core", cap: 1, bank: null, refillMs: null, assign: "main", icon: EXPLORE_ICON, notes: "Hunt 10 monsters in the Abyss. Once per week per server. Through the Nov 4 maintenance." },
   { id: "season-transcendence", name: "Halloween: Transcendence", cadence: "season", scope: "character", tag: "core", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: DUNGEON_ICON, notes: "Clear Transcendence once. Through the Nov 4 maintenance." },
   { id: "season-expedition", name: "Halloween: Expedition", cadence: "season", scope: "character", tag: "core", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: DUNGEON_ICON, notes: "Clear Expedition Conquest once. Through the Nov 4 maintenance." },
@@ -101,6 +107,8 @@ export const TASKS: TaskDef[] = [
   { id: "season-candy-blue", name: "Blue Candy Key", cadence: "season", scope: "server", tag: "core", cap: 1, bank: null, refillMs: null, assign: "main", icon: SHOP_ICON, notes: "Craft once per week per server." },
   { id: "season-rift-kina", name: "Conquerors rift stone", cadence: "season", scope: "character", tag: "core", cap: 7, bank: null, refillMs: null, assign: "everyone", icon: SHOP_ICON, notes: "7 Abyss Rift Stones per character per week, 50,000 Kina each. Through the Oct 28 maintenance." },
 ]
+
+export const TASKS: TaskDef[] = TASK_INPUT.map((task) => ({ priority: "medium", ...task }))
 
 export type ChecklistCharacter = {
   id: string
@@ -139,6 +147,7 @@ export type ChecklistRow = {
   notes: string
   cadence: Cadence
   tag: TaskTag
+  priority: Priority
   count: number
   cap: number
   bank: number | null
@@ -332,7 +341,6 @@ function endgame(character: ChecklistCharacter): boolean {
 }
 
 const ABYSS_IDS = new Set(["abyss"])
-const GEARING_IDS = new Set(["krao", "urugugu", "growth-graveyard", "growth-fafnite"])
 
 function belowGear(character: ChecklistCharacter): boolean {
   return (character.itemLevel ?? 0) < GEAR_GATE
@@ -361,18 +369,12 @@ export function placement(
     return fieldBossOwner(roster)?.id === character.id ? "edit" : "hidden"
   }
   if (ABYSS_IDS.has(task.id)) {
-    return character.role === "main" && !belowGear(character) ? "edit" : "hidden"
+    return character.role === "main" && (character.itemLevel ?? 0) >= ABYSS_GATE ? "edit" : "hidden"
   }
-  if (task.id === "odyle-craft-server" || task.id === "fissure-week") return "hidden"
+  if (task.id === "odyle-craft-server" || task.id === "fissure-week" || task.assign === "raids") return "hidden"
   if (task.scope === "server") return "edit"
   if (task.assign === "main") {
     return character.role === "main" ? "edit" : "hidden"
-  }
-  if (GEARING_IDS.has(task.id) || task.assign === "alt-only") {
-    return belowGear(character) ? "edit" : "hidden"
-  }
-  if (task.assign === "raids") {
-    return belowGear(character) ? "hidden" : "edit"
   }
   return "edit"
 }
@@ -387,20 +389,20 @@ export function rowUrgency(
   now: number,
 ): { urgency: Urgency; reason: string } {
   if (bankCap != null && bank != null && bank >= bankCap) {
-    return { urgency: "do-now", reason: `The bank is full at ${bankCap}. Another charge would be lost.` }
+    return { urgency: "do-now", reason: `Total entries are full at ${bankCap}. Another charge would be lost.` }
   }
   if (count >= cap) return { urgency: "done", reason: "Done for this reset." }
   if (bankCap != null) {
     const held = bank == null ? "not set" : `${bank}/${bankCap}`
-    return { urgency: "can-wait", reason: `Bank ${held}. It holds ${bankCap}, so this can wait until it is full.` }
+    return { urgency: "can-wait", reason: `Total entries ${held}. It holds ${bankCap}, so this can wait until it is full.` }
   }
   if (task.cadence === "weekly" && task.tag === "core" && inWeeklyBurnWindow(now)) {
-    return { urgency: "before-wednesday", reason: "This weekly does not bank. Finish it before Wednesday 3:00 PM." }
+    return { urgency: "before-wednesday", reason: "This weekly does not carry over. Finish it before Wednesday 3:00 PM." }
   }
   if (task.cadence === "daily" && task.tag === "core") {
     const left = nextDailyReset(now) - now
     if (left <= NEAR_RESET_MS) {
-      return { urgency: "do-now", reason: `Daily reset is in ${formatDuration(left)}. This one does not bank.` }
+      return { urgency: "do-now", reason: `Daily reset is in ${formatDuration(left)}. This one does not carry over.` }
     }
   }
   return { urgency: "steady", reason: "" }
@@ -408,7 +410,7 @@ export function rowUrgency(
 
 function timerText(task: TaskDef, progress: ChecklistProgress, scope: string, projection: BankProjection | null, bankCap: number | null, now: number): string | null {
   if (bankCap != null && projection && projection.gain > 0) {
-    if (projection.current != null && projection.current >= bankCap) return "Bank is full, so the refill is paused."
+    if (projection.current != null && projection.current >= bankCap) return "Total entries are full, so the refill is paused."
     if (projection.nextAt == null) return null
     return `Next +${projection.gain} in ${formatCountdown(projection.nextAt - now)}.`
   }
@@ -428,9 +430,33 @@ export function rowsForCharacter(
   now: number,
 ): ChecklistRow[] {
   const current = syncProgress(progress, now)
-  return TASKS.flatMap((task) => {
+  return TASKS.flatMap((task): ChecklistRow[] => {
     const mode = placement(task, character, roster, membership)
     if (mode === "hidden") return []
+    if (task.note) {
+      return [{
+        taskId: task.id,
+        name: task.name,
+        notes: task.notes,
+        cadence: task.cadence,
+        tag: task.tag,
+        priority: task.priority,
+        count: 0,
+        cap: 0,
+        bank: null,
+        bankCap: null,
+        urgency: "steady",
+        reason: task.notes,
+        timer: null,
+        mode: "note",
+        owner: "",
+        icon: task.icon,
+        shared: false,
+        stockBoxes: false,
+        parts: [],
+        bankFullAt: null,
+      }]
+    }
     const bankCap = taskBankCap(task, membership)
     const bankKey = progressKey(task.id, scopeIdFor(task, character))
     const storedBank = bankCap == null || current.banks[bankKey] == null ? null : current.banks[bankKey]
@@ -450,6 +476,7 @@ export function rowsForCharacter(
       notes: task.notes,
       cadence: task.cadence,
       tag: task.tag,
+      priority: task.priority,
       count,
       cap,
       bank,
@@ -764,6 +791,7 @@ export type GoalLine = {
   title: string
   detail: string
   kind: GoalKind
+  priority: Priority
   icon?: string
 }
 
@@ -782,18 +810,24 @@ export function characterGoals(rows: ChecklistRow[], now: number, odyle: OdyleGo
       title: "Odyle energy",
       detail: odyleDetail(odyle, now),
       kind: "odyle",
+      priority: "critical",
     })
   }
   const soon = upcomingBosses(now).filter((boss) => boss.at - now <= BOSS_SOON_MS)
   for (const row of rows) {
     if (row.mode !== "edit" || row.cadence === "season" || !goalShown(row)) continue
     const due = goalUrgent(row, now)
-    if (row.tag === "optional" && !due) continue
     const line = goalLine(row, soon, now)
     if (due) today.push(line)
     else later.push(line)
   }
+  today.sort(byGoalPriority)
+  later.sort(byGoalPriority)
   return { today, later }
+}
+
+function byGoalPriority(a: GoalLine, b: GoalLine): number {
+  return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
 }
 
 function goalShown(row: ChecklistRow): boolean {
@@ -807,7 +841,6 @@ function goalUrgent(row: ChecklistRow, now: number): boolean {
   if (row.bank != null && row.bankCap != null && row.bank >= row.bankCap) return true
   if (row.bankFullAt != null && row.bankFullAt - now <= TWO_DAYS_MS) return true
   if (row.urgency === "do-now") return true
-  if (row.tag === "optional") return false
   if (row.bankCap == null && row.cadence === "daily" && row.count < row.cap) return true
   if (row.bankCap == null && row.cadence === "weekly" && row.count < row.cap && nextWeeklyReset(now) - now <= TWO_DAYS_MS) return true
   return false
@@ -816,10 +849,10 @@ function goalUrgent(row: ChecklistRow, now: number): boolean {
 function goalLine(row: ChecklistRow, soon: { name: string; at: number }[], now: number): GoalLine {
   const status: string[] = []
   if (row.stockBoxes) {
-    status.push(row.bank == null || row.bankCap == null ? "Bank not set" : `Bank ${row.bank}/${row.bankCap}`)
+    status.push(row.bank == null || row.bankCap == null ? "Total entries not set" : `Total entries ${row.bank}/${row.bankCap}`)
   } else {
     if (row.cap > 0) status.push(`${row.count}/${row.cap}`)
-    if (row.bankCap != null) status.push(row.bank == null ? "Bank not set" : `Bank ${row.bank}/${row.bankCap}`)
+    if (row.bankCap != null) status.push(row.bank == null ? "Total entries not set" : `Total entries ${row.bank}/${row.bankCap}`)
   }
   if (row.timer) status.push(row.timer)
   if (row.taskId === "field-bosses") {
@@ -830,6 +863,7 @@ function goalLine(row: ChecklistRow, soon: { name: string; at: number }[], now: 
     title: row.name,
     detail: [row.notes, status.join(" · ")].filter(Boolean).join(" "),
     kind: GOAL_KIND_BY_TASK[row.taskId] ?? "missions",
+    priority: row.priority,
     icon: row.icon,
   }
 }

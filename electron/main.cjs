@@ -46,7 +46,7 @@ function contentType(file) {
   return "application/octet-stream"
 }
 
-function proxy(req, res, origin, prefix) {
+function proxy(req, res, origin, prefix, headers) {
   const incoming = new URL(req.url, "http://127.0.0.1")
   const target = new URL(origin)
   const upstreamPath = incoming.pathname.replace(new RegExp(`^${prefix}`), "") + incoming.search
@@ -55,7 +55,7 @@ function proxy(req, res, origin, prefix) {
       hostname: target.hostname,
       path: upstreamPath,
       method: "GET",
-      headers: {
+      headers: headers ?? {
         accept: "application/json",
         referer: "https://aion2.plaync.com/en-us/characters/index",
         origin: "https://aion2.plaync.com",
@@ -84,6 +84,13 @@ function startServer(root) {
     }
     if (incoming.pathname.startsWith("/nc-aion")) {
       proxy(req, res, "https://aion2.plaync.com", "/nc-aion")
+      return
+    }
+    if (incoming.pathname.startsWith("/guide-vault")) {
+      proxy(req, res, "https://aion2vault.com", "/guide-vault", {
+        accept: "text/html,application/xhtml+xml",
+        "user-agent": "Mozilla/5.0 (compatible; Aion2Progress/0.3)",
+      })
       return
     }
     const relative = incoming.pathname === "/" ? "index.html" : incoming.pathname.replace(/^\/+/, "")
@@ -133,7 +140,7 @@ function createWindow(port) {
     height: 860,
     minWidth: 900,
     minHeight: 640,
-    title: "AION 2 Character Sheet",
+    title: `AION 2 Character Sheet v${app.getVersion()}`,
     backgroundColor: "#070707",
     alwaysOnTop: above,
     webPreferences: {
@@ -147,11 +154,36 @@ function createWindow(port) {
   void win.loadURL(`http://127.0.0.1:${port}/`)
 }
 
-function watchForUpdates() {
-  if (!app.isPackaged) return
+function publishUpdate(status, extra) {
+  windowRef?.webContents.send("updates:status", { status, ...(extra ?? {}) })
+}
+
+let updaterReady = false
+
+function ensureUpdater() {
+  if (!app.isPackaged) return null
   const { autoUpdater } = require("electron-updater")
-  autoUpdater.autoDownload = true
-  autoUpdater.checkForUpdatesAndNotify().catch(() => {})
+  if (updaterReady) return autoUpdater
+  updaterReady = true
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = false
+  autoUpdater.on("checking-for-update", () => publishUpdate("checking"))
+  autoUpdater.on("update-available", (info) => publishUpdate("available", {
+    version: info?.version ?? "",
+    notes: info?.releaseNotes ?? null,
+  }))
+  autoUpdater.on("update-not-available", () => publishUpdate("none"))
+  autoUpdater.on("download-progress", (progress) => publishUpdate("downloading", {
+    percent: Math.max(0, Math.round(progress?.percent ?? 0)),
+  }))
+  autoUpdater.on("update-downloaded", (info) => publishUpdate("downloaded", {
+    version: info?.version ?? "",
+    notes: info?.releaseNotes ?? null,
+  }))
+  autoUpdater.on("error", (error) => publishUpdate("error", {
+    message: error?.message || "Update check failed",
+  }))
+  return autoUpdater
 }
 
 app.whenReady().then(async () => {
@@ -160,7 +192,7 @@ app.whenReady().then(async () => {
   const root = path.join(app.getAppPath(), "dist")
   const { port } = await startServer(root)
   createWindow(port)
-  watchForUpdates()
+  ensureUpdater()
 
   ipcMain.handle("tracker:load", () => readText(savePath(SAVE_NAME)))
   ipcMain.handle("tracker:save", (_event, raw) => {
@@ -173,6 +205,23 @@ app.whenReady().then(async () => {
     windowRef?.setAlwaysOnTop(enabled, "floating")
     writeText(savePath(WINDOW_NAME), JSON.stringify({ alwaysOnTop: enabled }))
     return enabled
+  })
+  ipcMain.handle("updates:version", () => app.getVersion())
+  ipcMain.handle("updates:check", async () => {
+    const autoUpdater = ensureUpdater()
+    if (!autoUpdater) return { supported: false }
+    await autoUpdater.checkForUpdates().catch(() => {})
+    return { supported: true }
+  })
+  ipcMain.handle("updates:download", async () => {
+    const autoUpdater = ensureUpdater()
+    if (!autoUpdater) return
+    await autoUpdater.downloadUpdate().catch(() => {})
+  })
+  ipcMain.handle("updates:install", () => {
+    const autoUpdater = ensureUpdater()
+    if (!autoUpdater) return
+    autoUpdater.quitAndInstall(false, true)
   })
 })
 

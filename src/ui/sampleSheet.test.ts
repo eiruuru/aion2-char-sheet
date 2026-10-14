@@ -22,7 +22,7 @@ describe("tour sample sheet", () => {
 
   it("keeps example checks on the sample id", () => {
     const progress = sampleProgress()
-    expect(progress.counts[`supply-daily|${SAMPLE_ID}`]).toBe(1)
+    expect(progress.counts[`qina|${SAMPLE_ID}`]).toBe(1)
     expect(progress.banks[`nightmare|${SAMPLE_ID}`]).toBe(6)
     expect(JSON.stringify(progress)).not.toContain("aion2-tracker-v1")
   })

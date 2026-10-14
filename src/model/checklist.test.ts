@@ -66,18 +66,17 @@ describe("assignment", () => {
     expect(mainDuty?.parts[0].owners).toEqual(["alt", "alt"])
   })
 
-  it("keeps gearing content on a character under 1400", () => {
+  it("keeps field bosses on a character under 1400 and hides the global raids", () => {
     const rows = rowsForCharacter(gearing, [main, gearing], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
-    expect(rows.some((row) => row.taskId === "krao")).toBe(true)
     expect(rows.some((row) => row.taskId === "field-bosses")).toBe(true)
     expect(rows.some((row) => row.taskId.startsWith("raid-"))).toBe(false)
-    expect(rows.some((row) => row.taskId === "growth-graveyard")).toBe(true)
+    expect(rows.some((row) => row.taskId === "krao" || row.taskId === "growth-graveyard" || row.taskId === "growth-fafnite")).toBe(false)
   })
 
-  it("switches a 1400 character to raids and drops the gearing list", () => {
+  it("hides the global raids once a character reaches 1400", () => {
     const rows = rowsForCharacter(ready, [main, ready], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
-    expect(rows.some((row) => row.taskId === "raid-ludra")).toBe(true)
-    expect(rows.some((row) => row.taskId === "krao" || row.taskId === "urugugu" || row.taskId === "field-bosses" || row.taskId === "growth-graveyard")).toBe(false)
+    expect(rows.some((row) => row.taskId.startsWith("raid-"))).toBe(false)
+    expect(rows.some((row) => row.taskId === "field-bosses")).toBe(false)
   })
 
   it("gives field bosses to the lowest character under 1400, then back to the main", () => {
@@ -110,10 +109,15 @@ describe("assignment", () => {
     expect(member.find((row) => row.taskId === "shugo")?.bankCap).toBe(21)
   })
 
-  it("keeps Abyss at 7 hours total and lists the seasonal event separately", () => {
-    const member = rowsForCharacter(main, [main], emptyProgress(FAR_FROM_RESET), true, FAR_FROM_RESET)
-    const abyss = member.filter((row) => row.taskId === "abyss" || row.name.includes("Reshanta"))
+  it("keeps Abyss at 7 hours for a main at gear score 1000 and lists the seasonal event separately", () => {
+    const under = character({ id: "main", name: "Nairen", role: "main", itemLevel: 999 })
+    expect(rowsForCharacter(under, [under], emptyProgress(FAR_FROM_RESET), true, FAR_FROM_RESET)
+      .some((row) => row.taskId === "abyss")).toBe(false)
+    const atGate = character({ id: "main", name: "Nairen", role: "main", itemLevel: 1000 })
+    const member = rowsForCharacter(atGate, [atGate], emptyProgress(FAR_FROM_RESET), true, FAR_FROM_RESET)
+    const abyss = member.filter((row) => row.taskId === "abyss")
     expect(abyss).toHaveLength(1)
+    expect(abyss[0].name).toBe("Abyss farming and missions")
     expect(abyss[0].cap).toBe(7)
     expect(abyss[0].cadence).toBe("weekly")
     const season = member.filter((row) => row.cadence === "season")
@@ -136,13 +140,33 @@ describe("urgency", () => {
     expect(row?.urgency).toBe("do-now")
   })
 
-  it("flags an open daily that does not bank inside 6 hours of reset", () => {
+  it("flags an open daily that does not carry over inside 6 hours of reset", () => {
     const early = rowsForCharacter(main, [main], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
-      .find((row) => row.taskId === "supply-daily")
+      .find((row) => row.taskId === "qina")
     expect(early?.urgency).toBe("steady")
     const late = rowsForCharacter(main, [main], emptyProgress(NEAR_DAILY_RESET), false, NEAR_DAILY_RESET)
-      .find((row) => row.taskId === "supply-daily")
+      .find((row) => row.taskId === "qina")
     expect(late?.urgency).toBe("do-now")
+  })
+
+  it("sorts dailies from critical to low and keeps Conquest as a note", () => {
+    const dailies = rowsForCharacter(main, [main], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
+      .filter((row) => row.cadence === "daily")
+    expect(dailies.map((row) => row.taskId)).toEqual([
+      "transcendence",
+      "conquest",
+      "nightmare",
+      "duty",
+      "field-bosses",
+      "shugo",
+      "dimension",
+      "rift",
+      "fissure-day",
+      "qina",
+    ])
+    expect(dailies.find((row) => row.taskId === "conquest")?.mode).toBe("note")
+    expect(dailies.find((row) => row.taskId === "dimension")?.name).toBe("Dimensional Invasion")
+    expect(dailies.some((row) => row.taskId === "supply-daily" || row.taskId === "attendance")).toBe(false)
   })
 
   it("shows Odyle craft as 4 personal boxes plus 16 shared boxes", () => {
@@ -221,7 +245,7 @@ describe("banks", () => {
     expect(row?.bank).toBe(21)
     expect(row?.parts[0].cap).toBe(21)
     expect(row?.parts[0].owners).toHaveLength(0)
-    expect(row?.timer).toBe("Bank is full, so the refill is paused.")
+    expect(row?.timer).toBe("Total entries are full, so the refill is paused.")
   })
 
   it("spends a banked charge when a box is ticked, and puts it back when cleared", () => {
@@ -290,17 +314,16 @@ describe("today list", () => {
     expect(items[0]?.title).toContain("Nightmare")
     const unset = sessionItems([main], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
     expect(unset.some((item) => item.band === "lost" && item.title.includes("Nightmare"))).toBe(false)
-    expect(unset.some((item) => item.title.includes("Supply Request"))).toBe(true)
+    expect(unset.some((item) => item.title.includes("Open world Qina"))).toBe(true)
   })
 
-  it("keeps Wednesday leftovers as tasks with the character who still needs them", () => {
+  it("keeps field bosses with the gearing character", () => {
     const main = character({ id: "main", name: "Nairen", role: "main", itemLevel: 1700 })
     const gearing = character({ id: "alt", name: "Clarion", role: "alt", itemLevel: 1000 })
     const items = sessionItems([main, gearing], emptyProgress(TUE_BURN), false, TUE_BURN)
-    const week = items.filter((item) => item.band === "week")
-    expect(week.some((item) => item.taskName === "Krao Cave" && item.characterId === "alt")).toBe(true)
-    expect(week.some((item) => item.taskName === "Krao Cave" && item.characterId === "main")).toBe(false)
-    expect(week.some((item) => item.characterId === "alt" && item.taskName.startsWith("Raid"))).toBe(false)
+    expect(items.some((item) => item.taskName === "Field bosses" && item.characterId === "alt")).toBe(true)
+    expect(items.some((item) => item.taskName === "Field bosses" && item.characterId === "main")).toBe(false)
+    expect(items.some((item) => item.taskName.startsWith("Raid"))).toBe(false)
   })
 })
 
@@ -311,10 +334,14 @@ describe("goals", () => {
   it("keeps unfinished dailies on Today and weeklies for later when Wednesday is days away", () => {
     const rows = rowsForCharacter(main, [main], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
     const goals = characterGoals(rows, FAR_FROM_RESET, null)
-    expect(names(goals.today)).toContain("Supply Request")
+    expect(names(goals.today)).toContain("Open world Qina")
     expect(names(goals.today)).not.toContain("Ascension Trial")
     expect(names(goals.later)).toContain("Ascension Trial")
-    expect(names([...goals.today, ...goals.later])).not.toContain("Weekly shops")
+    expect(names(goals.later)).toContain("Shop weekly limited items")
+    const duty = names(goals.today).indexOf("Duty Missions")
+    const qina = names(goals.today).indexOf("Open world Qina")
+    expect(duty).toBeGreaterThanOrEqual(0)
+    expect(qina).toBeGreaterThan(duty)
   })
 
   it("moves a weekly onto Today inside two days of Wednesday", () => {

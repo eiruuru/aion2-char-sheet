@@ -24,10 +24,11 @@ import { factionName } from "./api/serverList"
 import { characterSuggestions, rosterOrder } from "./model/suggestions"
 import { CUBE_COST, odyleCap, projectOdyle, shiftOdyleClock, spendOdyleReading } from "./model/odyle"
 import { desktopBridge } from "./desktop"
+import { APP_VERSION, reduceUpdateStatus, UPDATE_SKIP_KEY, WINDOW_TITLE, type UpdateOffer } from "./model/updates"
 import { AddCharacter } from "./ui/AddCharacter"
 import { CharacterPanel } from "./ui/CharacterPanel"
 import { GoalsPanel } from "./ui/Goals"
-import { ExportIcon, ImportIcon, MembershipIcon, PinIcon, TrashIcon } from "./ui/icons"
+import { ExportIcon, ImportIcon, MembershipIcon, PinIcon, TrashIcon, UpdateIcon } from "./ui/icons"
 import { Onboarding } from "./ui/Onboarding"
 import { SAMPLE_ID, charactersForTour, sampleProgress } from "./ui/sampleSheet"
 import { clearOnboardingSeen, readOnboardingSeen, writeOnboardingSeen } from "./ui/tour"
@@ -45,8 +46,13 @@ export function App() {
   const [now, setNow] = useState(() => Date.now())
   const [aboveGame, setAboveGame] = useState(false)
   const [tourOpen, setTourOpen] = useState(() => !readOnboardingSeen(localStorage))
+  const [updateOffer, setUpdateOffer] = useState<UpdateOffer | null>(null)
+  const [updateNotice, setUpdateNotice] = useState("")
   const desktop = desktopBridge()
+  const updateAsked = useRef(false)
+  const updateOfferRef = useRef<UpdateOffer | null>(null)
   const storeRef = useRef(store)
+  updateOfferRef.current = updateOffer
   storeRef.current = store
 
   useEffect(() => {
@@ -54,7 +60,23 @@ export function App() {
   }, [store])
 
   useEffect(() => {
+    document.title = WINDOW_TITLE
+  }, [])
+
+  useEffect(() => {
     void desktop?.getAlwaysOnTop().then(setAboveGame)
+  }, [desktop])
+
+  useEffect(() => {
+    if (!desktop) return
+    const stop = desktop.onUpdate((status) => {
+      const next = reduceUpdateStatus(updateOfferRef.current, status, localStorage.getItem(UPDATE_SKIP_KEY), updateAsked.current)
+      setUpdateNotice(next.notice)
+      setUpdateOffer(next.offer)
+      if (next.install) void desktop.installUpdate()
+    })
+    void desktop.checkForUpdates()
+    return stop
   }, [desktop])
 
   useEffect(() => {
@@ -327,6 +349,20 @@ export function App() {
           <h1>AION 2 Character Sheet</h1>
         </div>
         <div className="actions">
+          <span className="app-version">v{APP_VERSION}</span>
+          <button type="button" className="icon-button ghost" aria-label="Check for updates" title="Check for updates" onClick={() => {
+            updateAsked.current = true
+            setUpdateNotice("")
+            if (!desktop) {
+              setUpdateNotice("Updates install inside the Windows app.")
+              return
+            }
+            void desktop.checkForUpdates().then((result) => {
+              if (!result.supported) setUpdateNotice("Updates install inside the Windows app.")
+            })
+          }}>
+            <UpdateIcon />
+          </button>
           <div className="tour-tools" data-tour="tools">
           <button
             type="button"
@@ -381,6 +417,27 @@ export function App() {
           </button>
         </div>
       </header>
+      {updateNotice ? <p className="muted update-status">{updateNotice}</p> : null}
+      {updateOffer ? (
+        <section className="panel update-card">
+          <h2>Update v{updateOffer.version}</h2>
+          {updateOffer.notes ? <p className="update-notes">{updateOffer.notes}</p> : <p className="muted">Version {updateOffer.version} is ready.</p>}
+          {updateOffer.phase === "available" ? (
+            <div className="update-actions">
+              <button type="button" className="quiet" onClick={() => {
+                localStorage.setItem(UPDATE_SKIP_KEY, updateOffer.version)
+                setUpdateOffer(null)
+              }}>Stay on v{APP_VERSION}</button>
+              <button type="button" onClick={() => {
+                setUpdateOffer((current) => current ? { ...current, phase: "downloading", percent: 0 } : current)
+                void desktop?.downloadUpdate()
+              }}>Update to v{updateOffer.version}</button>
+            </div>
+          ) : (
+            <p className="muted">{updateOffer.phase === "downloaded" ? "Restarting…" : `Downloading… ${updateOffer.percent ?? 0}%`}</p>
+          )}
+        </section>
+      ) : null}
       {error ? <p className="error banner">{error}</p> : null}
       <div className="workspace">
         <div className="character-column">

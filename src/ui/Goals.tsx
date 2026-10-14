@@ -3,7 +3,9 @@ import type { CharacterRecord } from "../model/store"
 import { parseStoredNumber } from "../model/store"
 import { formatCountdown, formatNumber, formatWhen } from "../model/format"
 import { CUBE_COST, type OdyleProjection } from "../model/odyle"
-import { characterGoals, GOAL_KINDS, type ChecklistRow, type GoalLine } from "../model/checklist"
+import { characterGoals, type ChecklistRow, type GoalLine } from "../model/checklist"
+import { PriorityMark } from "./Checklist"
+import { guideLines, loadClassGuide, type GuideSummary } from "../model/guides"
 import type { Suggestion } from "../model/suggestions"
 import { Sparkline } from "./Sparkline"
 
@@ -47,7 +49,7 @@ export function GoalsPanel({
         </div>
         <div className="goals-scroll">
           {tab === "advice" ? (
-            <AdviceView character={character} suggestions={suggestions} />
+            <AdviceView character={character} suggestions={suggestions} active />
           ) : (
             <>
               {character ? null : <p className="muted">Add a character to track goals.</p>}
@@ -61,9 +63,21 @@ export function GoalsPanel({
   )
 }
 
-function AdviceView({ character, suggestions }: { character: CharacterRecord | null; suggestions: Suggestion[] }) {
+function AdviceView({ character, suggestions, active }: { character: CharacterRecord | null; suggestions: Suggestion[]; active: boolean }) {
+  const [guide, setGuide] = useState<GuideSummary | null>(null)
+  const className = character?.className ?? ""
+  const skills = character?.latest?.skills
+  useEffect(() => {
+    if (!active || !className || !skills?.length) return
+    let cancel = false
+    void loadClassGuide(className, skills.map((skill) => skill.name), localStorage).then((summary) => {
+      if (!cancel) setGuide(summary)
+    })
+    return () => { cancel = true }
+  }, [active, className, skills])
   if (!character) return <p className="muted">Add a character to see advice.</p>
   const snapshot = character.latest
+  const guides = guideLines(skills, guide, className)
   return (
     <>
       <h3>Where to spend next</h3>
@@ -75,6 +89,22 @@ function AdviceView({ character, suggestions }: { character: CharacterRecord | n
           </li>
         )) : <li>Nothing to suggest until this character has a profile.</li>}
       </ul>
+      {guides.length ? (
+        <>
+          <h3>From guides</h3>
+          <ul className="suggestions">
+            {guides.map((line) => (
+              <li key={line.id}>
+                <strong>{line.title}</strong>
+                <p>
+                  {line.detail}{" "}
+                  <a className="guide-link" href={line.href} target="_blank" rel="noreferrer">{line.linkLabel}</a>
+                </p>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
       <h3>Combat power</h3>
       {snapshot ? (
         <>
@@ -92,50 +122,26 @@ function AdviceView({ character, suggestions }: { character: CharacterRecord | n
 }
 
 function GoalGroup({ title, lines, empty }: { title: string; lines: GoalLine[]; empty: string }) {
-  const kinds = GOAL_KINDS.map((kind) => ({
-    ...kind,
-    lines: lines.filter((line) => line.kind === kind.id),
-  })).filter((kind) => kind.lines.length)
   return (
     <section className="goal-group">
       <h3>{title}</h3>
-      {kinds.length ? kinds.map((kind) => (
-        <GoalKind key={kind.id} label={kind.label} lines={kind.lines} />
-      )) : <p className="muted">{empty}</p>}
-    </section>
-  )
-}
-
-function GoalKind({ label, lines }: { label: string; lines: GoalLine[] }) {
-  const [open, setOpen] = useState(true)
-  return (
-    <div className="goal-kind">
-      <button type="button" className="group-toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        <ChevronIcon />
-        {label}
-      </button>
-      {open ? (
+      {lines.length ? (
         <ul className="quests">
           {lines.map((line) => (
             <li key={line.id} className="quest">
-              {line.icon ? <img className="content-icon" src={line.icon} alt="" /> : <span className="quest-mark" aria-hidden="true" />}
-              <span>
-                <strong>{line.title}</strong>
+              <span className="quest-marks">
+                <PriorityMark priority={line.priority} />
+                {line.icon ? <img className="content-icon" src={line.icon} alt="" /> : <span className="content-icon" />}
+              </span>
+              <span className="quest-copy">
+                <strong className={`priority-name priority-${line.priority}`}>{line.title}</strong>
                 {line.detail ? <p className="muted">{line.detail}</p> : null}
               </span>
             </li>
           ))}
         </ul>
-      ) : null}
-    </div>
-  )
-}
-
-function ChevronIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M4 6.2 8 10.2 12 6.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+      ) : <p className="muted">{empty}</p>}
+    </section>
   )
 }
 

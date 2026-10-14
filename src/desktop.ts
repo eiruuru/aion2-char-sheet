@@ -1,10 +1,19 @@
+import type { UpdateStatus } from "./model/updates"
+
 const STORAGE_KEY = "aion2-tracker-v1"
+
+export type { UpdateStatus }
 
 type TrackerBridge = {
   loadFile: () => Promise<string | null>
   saveFile: (raw: string) => Promise<void>
   getAlwaysOnTop: () => Promise<boolean>
   setAlwaysOnTop: (on: boolean) => Promise<boolean>
+  getVersion: () => Promise<string>
+  checkForUpdates: () => Promise<{ supported: boolean }>
+  downloadUpdate: () => Promise<void>
+  installUpdate: () => Promise<void>
+  onUpdate: (callback: (status: UpdateStatus) => void) => () => void
 }
 
 declare global {

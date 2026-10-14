@@ -149,8 +149,7 @@ function odyleSuggestion(character: CharacterRecord, membership: boolean, now: n
   const projection = projectOdyle(character.odyle, odyleCap(membership), now)
   const near = projection.full || projection.aboveCap || projection.ticksUntilFull <= 1
   if (!near) return null
-  const gearingAlt = character.role !== "main" && (character.latest?.itemLevel ?? 0) < 1400
-  const place = gearingAlt ? "Open Krao Cave cubes (20 Odyle)" : "Open Conquest cubes"
+  const place = "Run Conquest Dungeons"
   const lost = projection.lost > 0 ? ` About ${formatNumber(projection.lost)} regen has already been lost.` : ""
   return {
     id: "odyle",

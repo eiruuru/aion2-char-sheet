@@ -37,7 +37,7 @@ Seasonal rows follow the current events. Halloween tasks and the pumpkin shop ru
 
 ## Windows
 
-Install Aion 2 Progress from the [latest release](https://github.com/eiruuru/aion2-char-sheet/releases). Opening the app later checks GitHub and installs a newer version.
+Install Aion 2 Progress from the [latest release](https://github.com/eiruuru/aion2-char-sheet/releases). The window title and the top bar show the installed version. Opening the app checks GitHub. When a newer release exists, a card shows that release's notes, with a choice to stay on the current version or install the new one. The check button in the top bar runs the same check again.
 
 The roster and the "keep this window above the game" setting are saved in `%APPDATA%\Aion 2 Progress`. An update replaces the program and leaves that folder alone. If an older copy left `aion2-tracker.json` or `aion2-window.json` beside the exe, the first launch copies them into that folder.
 
