@@ -1,7 +1,7 @@
 Aion 2 Progress
 
-Run Aion2Progress.exe from this folder. Leave the other files here. The app needs them.
+Install with Aion 2 Progress Setup.exe. Opening the app later checks GitHub for a newer version and installs it.
 
-Your roster is saved as aion2-tracker.json in this same folder. "Keep this window above the game" is saved as aion2-window.json.
+Your roster and the "keep this window above the game" setting are saved in %APPDATA%\Aion 2 Progress. Installing an update does not remove them. If an older copy left aion2-tracker.json or aion2-window.json next to the exe, the first launch copies those into that folder.
 
 The app reads public character pages. Odyle, Qina, and the other wallet numbers are typed in, then they count forward on their clocks. It does not attach to the game.

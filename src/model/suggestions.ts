@@ -184,12 +184,12 @@ export function characterSuggestions(
 export function rosterOrder(characters: CharacterRecord[], membership: boolean, now = Date.now()): CharacterRecord[] {
   const cap = odyleCap(membership)
   return characters.slice().sort((a, b) => {
+    if (a.role !== b.role) return a.role === "main" ? -1 : 1
     const byOdyle = compareOdyle(
       a.odyle ? projectOdyle(a.odyle, cap, now) : null,
       b.odyle ? projectOdyle(b.odyle, cap, now) : null,
     )
     if (byOdyle !== 0) return byOdyle
-    if (a.role !== b.role) return a.role === "main" ? -1 : 1
     return a.name.localeCompare(b.name)
   })
 }

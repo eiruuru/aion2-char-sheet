@@ -1,4 +1,6 @@
 const { app, BrowserWindow, ipcMain } = require("electron")
+
+if (app.isPackaged) app.setName("Aion 2 Progress")
 const fs = require("fs")
 const http = require("http")
 const https = require("https")
@@ -7,9 +9,17 @@ const path = require("path")
 const SAVE_NAME = "aion2-tracker.json"
 const WINDOW_NAME = "aion2-window.json"
 
-function besideApp(name) {
-  const folder = app.isPackaged ? path.dirname(process.execPath) : app.getPath("userData")
-  return path.join(folder, name)
+function savePath(name) {
+  return path.join(app.getPath("userData"), name)
+}
+
+function adoptLegacySave(name) {
+  const dest = savePath(name)
+  if (fs.existsSync(dest) || !app.isPackaged) return
+  const legacy = path.join(path.dirname(process.execPath), name)
+  if (!fs.existsSync(legacy)) return
+  fs.mkdirSync(path.dirname(dest), { recursive: true })
+  fs.copyFileSync(legacy, dest)
 }
 
 function readText(file) {
@@ -113,7 +123,7 @@ let windowRef = null
 function createWindow(port) {
   let above = false
   try {
-    const saved = readText(besideApp(WINDOW_NAME))
+    const saved = readText(savePath(WINDOW_NAME))
     above = saved ? Boolean(JSON.parse(saved).alwaysOnTop) : false
   } catch {
     above = false
@@ -123,7 +133,7 @@ function createWindow(port) {
     height: 860,
     minWidth: 900,
     minHeight: 640,
-    title: "Aion 2 progress",
+    title: "AION 2 Character Sheet",
     backgroundColor: "#070707",
     alwaysOnTop: above,
     webPreferences: {
@@ -137,21 +147,31 @@ function createWindow(port) {
   void win.loadURL(`http://127.0.0.1:${port}/`)
 }
 
+function watchForUpdates() {
+  if (!app.isPackaged) return
+  const { autoUpdater } = require("electron-updater")
+  autoUpdater.autoDownload = true
+  autoUpdater.checkForUpdatesAndNotify().catch(() => {})
+}
+
 app.whenReady().then(async () => {
+  adoptLegacySave(SAVE_NAME)
+  adoptLegacySave(WINDOW_NAME)
   const root = path.join(app.getAppPath(), "dist")
   const { port } = await startServer(root)
   createWindow(port)
+  watchForUpdates()
 
-  ipcMain.handle("tracker:load", () => readText(besideApp(SAVE_NAME)))
+  ipcMain.handle("tracker:load", () => readText(savePath(SAVE_NAME)))
   ipcMain.handle("tracker:save", (_event, raw) => {
     if (typeof raw !== "string") return
-    writeText(besideApp(SAVE_NAME), raw)
+    writeText(savePath(SAVE_NAME), raw)
   })
   ipcMain.handle("tracker:top-get", () => Boolean(windowRef?.isAlwaysOnTop()))
   ipcMain.handle("tracker:top", (_event, on) => {
     const enabled = Boolean(on)
     windowRef?.setAlwaysOnTop(enabled, "floating")
-    writeText(besideApp(WINDOW_NAME), JSON.stringify({ alwaysOnTop: enabled }))
+    writeText(savePath(WINDOW_NAME), JSON.stringify({ alwaysOnTop: enabled }))
     return enabled
   })
 })

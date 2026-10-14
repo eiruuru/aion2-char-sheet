@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { CharacterRecord } from "./store"
 import type { Snapshot } from "./snapshot"
-import { characterSuggestions, priorityBoard } from "./suggestions"
+import { characterSuggestions, priorityBoard, rosterOrder } from "./suggestions"
 
 function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
   return {
@@ -73,6 +73,18 @@ describe("suggestions", () => {
     const suggestion = characterSuggestions(character(), [character()], false).find((item) => item.id === "gear")
     expect(suggestion?.title).toContain("Pants")
     expect(suggestion?.detail).toContain("+4")
+  })
+
+  it("keeps the main first even when an alt is closer to the Odyle cap", () => {
+    const now = Date.parse("2026-10-14T08:00:00.000Z")
+    const main = character({ id: "main", name: "Lunatiq", role: "main" })
+    const alt = character({
+      id: "alt",
+      name: "Lunaciel",
+      role: "alt",
+      odyle: { amount: 560, readAt: "2026-10-14T08:00:00.000Z" },
+    })
+    expect(rosterOrder([alt, main], false, now).map((entry) => entry.id)).toEqual(["main", "alt"])
   })
 
   it("flags an alt close to the next board and behind the main", () => {

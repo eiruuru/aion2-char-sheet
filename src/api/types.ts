@@ -71,6 +71,70 @@ export type EquipmentItem = {
   slotPosName: string
 }
 
+export type ItemStatLine = {
+  id?: string
+  name?: string
+  value?: string
+  extra?: string
+  exceed?: boolean
+}
+
+export type ItemStone = {
+  id?: string
+  icon?: string
+  name?: string
+  value?: string
+  grade?: string
+  desc?: string
+  slotPos?: number
+}
+
+export type ItemSkillLine = {
+  id?: number
+  name?: string
+  icon?: string
+  level?: number
+}
+
+export type ItemSetBonus = {
+  degree?: number
+  descriptions?: string[]
+}
+
+export type EquipmentItemDetail = {
+  id: number
+  name: string
+  grade: string
+  gradeName?: string
+  icon?: string
+  level?: number
+  enchantLevel?: number
+  categoryName?: string
+  classNames?: string[]
+  equipLevel?: number
+  magicStoneSlotCount?: number
+  godStoneSlotCount?: number
+  subStatCount?: number
+  subSkillCountMax?: number
+  mainStats?: ItemStatLine[]
+  subStats?: ItemStatLine[]
+  subSkills?: ItemSkillLine[]
+  magicStoneStat?: ItemStone[]
+  godStoneStat?: ItemStone[]
+  soulBindRate?: string
+  sources?: string[]
+  tradable?: boolean
+  tradablePersonal?: boolean
+  storable?: boolean
+  maxExceedEnchantLevel?: number
+  set?: {
+    name?: string
+    equippedCount?: number
+    items?: unknown[]
+    bonuses?: ItemSetBonus[]
+  }
+}
+
 export type PetSummary = {
   name?: string
   icon?: string

@@ -1,15 +1,14 @@
 import { useEffect, useState } from "react"
 import type { CharacterRecord } from "../model/store"
-import { parseStoredNumber } from "../model/store"
-import type { Suggestion } from "../model/suggestions"
 import { boardRank, slotLabel } from "../model/suggestions"
-import { formatCountdown, formatNumber, formatWhen, skillCategoryLabel } from "../model/format"
-import { CUBE_COST, type OdyleProjection } from "../model/odyle"
+import { formatNumber, formatWhen, skillCategoryLabel } from "../model/format"
 import type { ChecklistRow, MarkOwner } from "../model/checklist"
 import type { BoardPoint, GearPoint, SkillPoint, Snapshot } from "../model/snapshot"
 import { Checklist } from "./Checklist"
+import { ItemCard, useGearLookup, type GearQuery } from "./GearTip"
 import { GameIcon } from "./GameIcon"
-import { Sparkline } from "./Sparkline"
+import { classIconForName } from "../api/classes"
+import { RefreshIcon, StarIcon, TrashIcon } from "./icons"
 
 const WEAPON_SLOTS = ["MainHand", "SubHand"]
 const ARMOR_SLOTS = ["Torso", "Pants", "Helmet", "Shoulder", "Gloves", "Boots", "Cape"]
@@ -46,28 +45,28 @@ const SLOT_DISPLAY: Record<string, string> = {
   MaceMain: "Mace",
 }
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: "checklist", label: "Checklist" },
+const PLAY_TABS = [
+  { id: "dailies", label: "Dailies" },
+  { id: "weeklies", label: "Weeklies" },
+  { id: "season", label: "Seasonal" },
+] as const
+
+const BUILD_TABS = [
   { id: "gear", label: "Gear" },
   { id: "skills", label: "Skills" },
   { id: "boards", label: "Daevanion" },
-  { id: "advice", label: "Advice" },
-]
+  { id: "cosmetics", label: "Cosmetics" },
+] as const
 
-type TabId = "checklist" | "gear" | "skills" | "boards" | "advice" | "cosmetics"
+type PlayTab = (typeof PLAY_TABS)[number]["id"]
+type BuildTab = (typeof BUILD_TABS)[number]["id"]
 
 export function CharacterPanel({
   character,
-  suggestions,
-  projection,
-  now,
   busy,
   onRefresh,
   onDelete,
   onSetMain,
-  onSaveOdyle,
-  onSetOdyleTimer,
-  onSpendCube,
   checklistRows,
   names,
   roles,
@@ -75,16 +74,10 @@ export function CharacterPanel({
   onChecklistBank,
 }: {
   character: CharacterRecord
-  suggestions: Suggestion[]
-  projection: OdyleProjection | null
-  now: number
   busy: boolean
   onRefresh: () => void
   onDelete: () => void
   onSetMain: () => void
-  onSaveOdyle: (amount: number) => void
-  onSetOdyleTimer: (remainingMs: number) => void
-  onSpendCube: () => void
   checklistRows: ChecklistRow[]
   names: Record<string, string>
   roles: Record<string, "main" | "alt">
@@ -92,67 +85,68 @@ export function CharacterPanel({
   onChecklistBank: (taskId: string, value: number) => void
 }) {
   const snapshot = character.latest
-  const [tab, setTab] = useState<TabId>("checklist")
+  const [playTab, setPlayTab] = useState<PlayTab>("dailies")
+  const [buildTab, setBuildTab] = useState<BuildTab>("gear")
   const [boardId, setBoardId] = useState<number | null>(null)
-  const [odyleDraft, setOdyleDraft] = useState(character.odyle ? String(character.odyle.amount) : "")
-  const [hourDraft, setHourDraft] = useState("")
-  const [minuteDraft, setMinuteDraft] = useState("")
 
   useEffect(() => {
-    setOdyleDraft(character.odyle ? String(character.odyle.amount) : "")
     setBoardId(null)
-    if (!projection?.nextTickAt) {
-      setHourDraft("")
-      setMinuteDraft("")
-      return
-    }
-    const totalMinutes = Math.floor(Math.max(0, projection.nextTickAt - Date.now()) / 60000)
-    setHourDraft(String(Math.floor(totalMinutes / 60)))
-    setMinuteDraft(String(totalMinutes % 60))
-  }, [character.id, character.odyle?.amount, character.odyle?.readAt, projection?.nextTickAt])
+  }, [character.id])
 
-  const timerPaused = !projection || projection.full || projection.aboveCap || projection.nextTickAt == null
   const skins = snapshot?.skins ?? []
-  const tabs = skins.length ? [...TABS, { id: "cosmetics" as const, label: "Cosmetics" }] : TABS
-  const activeTab: TabId = tab === "cosmetics" && !skins.length ? "gear" : tab
+  const buildTabs = skins.length ? BUILD_TABS : BUILD_TABS.filter((item) => item.id !== "cosmetics")
+  const activeBuild: BuildTab = buildTab === "cosmetics" && !skins.length ? "gear" : buildTab
+  const gearQuery: GearQuery = {
+    region: character.region,
+    serverId: character.serverId,
+    characterId: character.characterId,
+  }
+  const gearLookup = useGearLookup(
+    gearQuery,
+    activeBuild === "cosmetics" ? skins : activeBuild === "gear" ? snapshot?.gear ?? [] : [],
+  )
   const className = snapshot?.className || character.className
   const raceName = snapshot?.raceName || character.raceName
 
   return (
+    <>
     <article className="detail">
       <header className="detail-head profile-head">
-        <div className="profile-main">
-          <div className="identity">
-            <div className="portrait-wrap">
-              {snapshot?.portrait ? <img src={snapshot.portrait} alt="" /> : <span className="portrait-fallback">{character.name.slice(0, 1)}</span>}
-              {snapshot ? <span className="level-badge">{snapshot.level}</span> : null}
-            </div>
-            <div>
-              <p className="eyebrow">{character.role === "main" ? "Main" : "Alt"} · {character.serverName}</p>
-              <h2>{character.name}</h2>
-              {snapshot?.titleName ? <p className="title-name">{snapshot.titleName}</p> : null}
-              <p className="muted">
-                {className || "Class loads on refresh"}
-                {raceName ? ` · ${raceName}` : ""}
-                {snapshot ? ` · Level ${snapshot.level}` : ""}
+        <div className="profile-row">
+          <div className="portrait-wrap">
+            {snapshot?.portrait ? <img src={snapshot.portrait} alt="" /> : <span className="portrait-fallback">{character.name.slice(0, 1)}</span>}
+          </div>
+          <div className="profile-name">
+            <p className="eyebrow">{character.role === "main" ? "Main" : "Alt"} · {character.serverName}</p>
+            <h2>{character.name}</h2>
+            {snapshot?.titleName || snapshot ? (
+              <p className="title-name">
+                {snapshot?.titleName ? <span className="title-label">{snapshot.titleName}</span> : null}
+                {snapshot ? <span className="title-count">({snapshot.titlesOwned}/{snapshot.titlesTotal})</span> : null}
               </p>
-              {snapshot ? (
-                <div className="identity-metrics">
-                  <div>
-                    <p className="eyebrow">Item level</p>
-                    <p className="stat-value">{snapshot.itemLevel == null ? "—" : formatNumber(snapshot.itemLevel)}</p>
-                  </div>
-                  <div>
-                    <p className="eyebrow">Combat power</p>
-                    <p className="stat-value">{formatNumber(snapshot.combatPower)}</p>
-                  </div>
-                </div>
+            ) : null}
+            <div className="actions profile-actions">
+              <button type="button" className="icon-button ghost" aria-label={busy ? "Refreshing" : "Refresh"} title={busy ? "Refreshing…" : "Refresh"} onClick={onRefresh} disabled={busy}>
+                <RefreshIcon />
+              </button>
+              {character.role === "alt" ? (
+                <button type="button" className="icon-button ghost" aria-label="Make main" title="Make main" onClick={onSetMain}>
+                  <StarIcon />
+                </button>
               ) : null}
-              {snapshot ? (
-                <p className="muted">Titles {snapshot.titlesOwned}/{snapshot.titlesTotal} · Updated {formatWhen(snapshot.at)}</p>
-              ) : (
-                <p className="muted">Refresh to pull the public profile: combat power, boards, gear, and skills.</p>
-              )}
+              <button type="button" className="icon-button ghost" aria-label="Remove" title="Remove" onClick={onDelete}>
+                <TrashIcon />
+              </button>
+            </div>
+          </div>
+          <div className="profile-scores">
+            <div className="profile-stat gear">
+              <p className="stat-title">Gear Score</p>
+              <p className="stat-value">{snapshot?.itemLevel == null ? "—" : formatNumber(snapshot.itemLevel)}</p>
+            </div>
+            <div className="profile-stat power">
+              <p className="stat-title">Combat power</p>
+              <p className="stat-value">{snapshot ? formatNumber(snapshot.combatPower) : "—"}</p>
             </div>
           </div>
           {snapshot && (snapshot.pet || snapshot.wing || snapshot.wingSkin) ? (
@@ -163,260 +157,121 @@ export function CharacterPanel({
             </div>
           ) : null}
         </div>
-        <div className="actions">
-          <button type="button" onClick={onRefresh} disabled={busy}>{busy ? "Refreshing…" : "Refresh"}</button>
-          {character.role === "alt" ? <button type="button" onClick={onSetMain}>Make main</button> : null}
-          <button type="button" className="ghost" onClick={onDelete}>Remove</button>
+        <div className="profile-side">
+          <div className="profile-class">
+            {className ? <img src={classIconForName(className)} alt="" /> : null}
+            <div>
+              <strong>{className || "Class loads on refresh"}</strong>
+              <p className="profile-race">
+                {raceName ? <span>{raceName}</span> : null}
+                {snapshot ? <span>Level {snapshot.level}</span> : null}
+              </p>
+            </div>
+          </div>
+          <div className="profile-meta">
+            {snapshot ? <span>Updated {formatWhen(snapshot.at)}</span> : <span>Refresh to pull the public profile.</span>}
+          </div>
         </div>
       </header>
-
-      <section className="panel">
-        <h3>Odyle energy</h3>
-        <p className="muted">The public profile does not include this. Type the number from the game, then set the hours and minutes until the next +15 so the clock matches.</p>
-        {projection ? (
-          <>
-            <div className="meter" role="meter" aria-valuemin={0} aria-valuemax={projection.cap} aria-valuenow={Math.min(projection.current, projection.cap)} aria-label="Odyle energy">
-              <span style={{ width: `${Math.min(100, (projection.current / projection.cap) * 100)}%` }} />
-            </div>
-            <p>
-              <strong>{formatNumber(projection.current)} / {formatNumber(projection.cap)}</strong>
-              {projection.aboveCap ? " · above the passive cap, regen paused" : null}
-              {projection.full && !projection.aboveCap ? ` · capping${projection.lost ? `, about ${formatNumber(projection.lost)} lost` : ""}` : null}
-              {!projection.full && !projection.aboveCap && projection.nextTickAt ? ` · next +15 in ${formatCountdown(projection.nextTickAt - now)}` : null}
-              {!projection.full && projection.fullAt ? ` · full in ${formatCountdown(projection.fullAt - now)}` : null}
-            </p>
-          </>
-        ) : <p>No reading yet.</p>}
-        <div className="inline">
-          <label>
-            Last reading
-            <input inputMode="numeric" value={odyleDraft} onChange={(event) => setOdyleDraft(event.target.value)} />
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              const amount = parseStoredNumber(odyleDraft)
-              if (amount == null) return
-              onSaveOdyle(amount)
-            }}
-          >
-            Save reading
-          </button>
-          <label>
-            Next +15 hours
-            <input
-              className="timer-input"
-              inputMode="numeric"
-              value={hourDraft}
-              disabled={timerPaused}
-              onChange={(event) => setHourDraft(event.target.value)}
-            />
-          </label>
-          <label>
-            Minutes
-            <input
-              className="timer-input"
-              inputMode="numeric"
-              value={minuteDraft}
-              disabled={timerPaused}
-              onChange={(event) => setMinuteDraft(event.target.value)}
-            />
-          </label>
-          <button type="button" disabled={!projection || timerPaused} onClick={() => {
-            const hours = clockPart(hourDraft)
-            const minutes = clockPart(minuteDraft)
-            if (hours == null || minutes == null || minutes > 59) return
-            onSetOdyleTimer((hours * 60 + minutes) * 60 * 1000)
-          }}>
-            Set timer
-          </button>
-          <button type="button" disabled={!projection} onClick={onSpendCube}>
-            Opened a cube (−{CUBE_COST})
-          </button>
-        </div>
-      </section>
-
-      <div className="tabs" role="tablist">
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === item.id}
-            onClick={() => setTab(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === "checklist" ? (
-        <Checklist
-          rows={checklistRows}
-          level={snapshot?.level ?? null}
-          names={names}
-          roles={roles}
-          characterId={character.id}
-          onBoxes={onChecklistBoxes}
-          onBank={onChecklistBank}
-        />
-      ) : null}
-
-      {activeTab === "advice" ? (
-        <>
-          <section className="panel">
-            <h3>Where to spend next</h3>
-            <ul className="suggestions">
-              {suggestions.map((suggestion) => (
-                <li key={suggestion.id}>
-                  <strong>{suggestion.title}</strong>
-                  <p>{suggestion.detail}</p>
-                </li>
-              ))}
-            </ul>
-          </section>
-          <section className="panel">
-            <h3>Combat power</h3>
-            {snapshot ? (
-              <>
-                <Sparkline values={character.history.map((point) => point.combatPower)} />
-                {character.history.length >= 2 ? (
-                  <p className="muted">
-                    First saved reading {formatNumber(character.history[0].combatPower)} on {formatWhen(character.history[0].at)}.
-                    Latest {formatNumber(snapshot.combatPower)}.
-                  </p>
-                ) : null}
-              </>
-            ) : <p>Refresh this character to start a combat-power history.</p>}
-          </section>
-        </>
-      ) : null}
-
-      {activeTab === "boards" ? (
-        snapshot ? <DaevanionView snapshot={snapshot} boardId={boardId} onSelect={setBoardId} /> : <section className="panel"><p>Refresh this character to load the boards.</p></section>
-      ) : null}
-
-      {activeTab === "gear" ? (
-        <GearView snapshot={snapshot} />
-      ) : null}
-
-      {activeTab === "skills" ? (
-        <SkillsView snapshot={snapshot} />
-      ) : null}
-
-      {activeTab === "cosmetics" ? (
-        <section className="panel">
-          <h3>Cosmetics</h3>
-          {skins.length ? (
-            <ul className="gear-grid">
-              {orderGear(skins, COSMETIC_SLOTS).map((item) => (
-                <li key={`${item.slot}:${item.name}`}><ItemCard item={item} /></li>
-              ))}
-            </ul>
-          ) : <p>No cosmetics on this snapshot.</p>}
-        </section>
-      ) : null}
     </article>
+
+      <div className="content-row">
+        <section className="panel">
+          <div className="tabs" role="tablist" aria-label="Tasks">
+            {PLAY_TABS.map((item) => (
+              <button key={item.id} type="button" role="tab" aria-selected={playTab === item.id} onClick={() => setPlayTab(item.id)}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="card-scroll">
+            <Checklist
+              cadence={playTab === "season" ? "season" : playTab === "weeklies" ? "weekly" : "daily"}
+              rows={checklistRows}
+              level={snapshot?.level ?? null}
+              names={names}
+              roles={roles}
+              characterId={character.id}
+              onBoxes={onChecklistBoxes}
+              onBank={onChecklistBank}
+            />
+          </div>
+        </section>
+        <section className="panel">
+          <div className="tabs" role="tablist" aria-label="Character">
+            {buildTabs.map((item) => (
+              <button key={item.id} type="button" role="tab" aria-selected={activeBuild === item.id} onClick={() => setBuildTab(item.id)}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className={activeBuild === "boards" ? "card-scroll board-pane" : "card-scroll"}>
+          {activeBuild === "boards" ? (
+            snapshot ? <DaevanionView snapshot={snapshot} boardId={boardId} onSelect={setBoardId} /> : <p>Refresh this character to load the boards.</p>
+          ) : null}
+          {activeBuild === "gear" ? <GearView snapshot={snapshot} query={gearQuery} lookup={gearLookup} /> : null}
+          {activeBuild === "skills" ? <SkillsView snapshot={snapshot} /> : null}
+          {activeBuild === "cosmetics" ? (
+            skins.length ? (
+              <ul className="gear-grid">
+                {orderGear(skins, COSMETIC_SLOTS).map((item) => (
+                  <li key={`${item.slot}:${item.name}`}><ItemCard item={item} slot={displaySlot(item.slot)} query={gearQuery} identity={gearLookup(item)} /></li>
+                ))}
+              </ul>
+            ) : <p>No cosmetics on this snapshot.</p>
+          ) : null}
+          </div>
+        </section>
+      </div>
+    </>
   )
 }
 
-function GearView({ snapshot }: { snapshot: Snapshot | null }) {
-  if (!snapshot) return <section className="panel"><p>Refresh this character to load gear.</p></section>
-  if (!snapshot.gear.length) return <section className="panel"><h3>Gear</h3><p>No gear on this snapshot.</p></section>
+function GearView({
+  snapshot,
+  query,
+  lookup,
+}: {
+  snapshot: Snapshot | null
+  query: GearQuery
+  lookup: (item: GearPoint) => { id: number; slotPos: number; enchant: number } | undefined
+}) {
+  if (!snapshot) return <p>Refresh this character to load gear.</p>
+  if (!snapshot.gear.length) return <p>No gear on this snapshot.</p>
   const known = new Set([...WEAPON_SLOTS, ...ARMOR_SLOTS, ...ACCESSORY_SLOTS, ...ARCANA_SLOTS])
   const other = snapshot.gear.filter((item) => !known.has(item.slot))
   return (
     <div className="gear-stack">
-      <GearGroup title="Weapons" items={orderGear(snapshot.gear, WEAPON_SLOTS)} columns="weapons" />
-      <GearGroup title="Armor" items={orderGear(snapshot.gear, ARMOR_SLOTS)} />
-      <GearGroup title="Accessories" items={orderGear(snapshot.gear, ACCESSORY_SLOTS)} />
-      <GearGroup title="Arcana" items={orderGear(snapshot.gear, ARCANA_SLOTS)} />
-      <GearGroup title="Other" items={other} />
+      <GearGroup title="Weapons" items={orderGear(snapshot.gear, WEAPON_SLOTS)} columns="weapons" query={query} lookup={lookup} />
+      <GearGroup title="Armor" items={orderGear(snapshot.gear, ARMOR_SLOTS)} query={query} lookup={lookup} />
+      <GearGroup title="Accessories" items={orderGear(snapshot.gear, ACCESSORY_SLOTS)} query={query} lookup={lookup} />
+      <GearGroup title="Arcana" items={orderGear(snapshot.gear, ARCANA_SLOTS)} query={query} lookup={lookup} />
+      <GearGroup title="Other" items={other} query={query} lookup={lookup} />
     </div>
   )
 }
 
-function GearGroup({ title, items, columns }: { title: string; items: GearPoint[]; columns?: string }) {
+function GearGroup({
+  title,
+  items,
+  columns,
+  query,
+  lookup,
+}: {
+  title: string
+  items: GearPoint[]
+  columns?: string
+  query: GearQuery
+  lookup: (item: GearPoint) => { id: number; slotPos: number; enchant: number } | undefined
+}) {
   if (!items.length) return null
   return (
-    <section className="panel">
+    <section>
       <h3>{title}</h3>
       <ul className={columns ? `gear-grid ${columns}` : "gear-grid"}>
         {items.map((item) => (
-          <li key={`${item.slot}:${item.name}`}><ItemCard item={item} /></li>
-        ))}
-      </ul>
-    </section>
-  )
-}
-
-function ItemCard({ item }: { item: GearPoint }) {
-  const slot = displaySlot(item.slot)
-  const enchant = item.enchant > 0 ? `+${item.enchant} ` : ""
-  const lines = [
-    `${enchant}${item.name}`.trim(),
-    item.grade,
-    slot,
-    `Enchant +${item.enchant}`,
-    item.exceed ? `Exceed +${item.exceed}` : "",
-  ].filter(Boolean)
-  return (
-    <div className={`item-card ${gradeClass(item.grade)}`} tabIndex={0}>
-      {item.icon ? <img src={item.icon} alt="" /> : <span className="item-fallback">{slot.slice(0, 1)}</span>}
-      <span className="item-copy">
-        <span className="item-name">{enchant}{item.name}</span>
-        <span className="item-slot">{slot}</span>
-      </span>
-      <span className="tip" role="tooltip">{lines.join("\n")}</span>
-    </div>
-  )
-}
-
-function SkillsView({ snapshot }: { snapshot: Snapshot | null }) {
-  if (!snapshot) return <section className="panel"><p>Refresh this character to load skills.</p></section>
-  const knowsEquip = snapshot.skills.some((skill) => typeof skill.equipped === "boolean")
-  if (!knowsEquip) {
-    const groups = ["Active", "Passive", "Dp"].map((category) => ({
-      category,
-      skills: snapshot.skills.filter((skill) => skill.category === category && skill.acquired),
-    })).filter((group) => group.skills.length)
-    return (
-      <section className="panel">
-        <h3>Skills</h3>
-        {groups.length ? groups.map((group) => (
-          <SkillGroup key={group.category} title={skillCategoryLabel(group.category)} skills={group.skills} />
-        )) : <p>No acquired skills on this snapshot.</p>}
-      </section>
-    )
-  }
-  const equippedSpecialty = snapshot.skills.filter((skill) => skill.category === "Dp" && skill.equipped)
-  const equippedActive = snapshot.skills.filter((skill) => skill.category === "Active" && skill.equipped)
-  const notEquipped = snapshot.skills.filter((skill) => skill.acquired && !skill.equipped && skill.category !== "Passive")
-  const notAcquired = snapshot.skills.filter((skill) => !skill.acquired && !skill.equipped)
-  const passive = snapshot.skills.filter((skill) => skill.category === "Passive" && skill.acquired)
-  const placed = new Set([...equippedSpecialty, ...equippedActive, ...notEquipped, ...notAcquired, ...passive])
-  const other = snapshot.skills.filter((skill) => !placed.has(skill))
-  return (
-    <div className="gear-stack">
-      <SkillGroup title="Equipped specialty" skills={equippedSpecialty} />
-      <SkillGroup title="Equipped active" skills={equippedActive} />
-      <SkillGroup title="Not equipped" skills={notEquipped} />
-      <SkillGroup title={`Not acquired (${notAcquired.length})`} skills={notAcquired} dim />
-      <SkillGroup title={`Passive skills (${passive.length})`} skills={passive} />
-      <SkillGroup title="Other" skills={other} />
-    </div>
-  )
-}
-
-function SkillGroup({ title, skills, dim }: { title: string; skills: SkillPoint[]; dim?: boolean }) {
-  if (!skills.length) return null
-  return (
-    <section className="panel">
-      <h3>{title}</h3>
-      <ul className="skill-grid">
-        {skills.map((skill) => (
-          <li key={`${skill.category}:${skill.name}`}>
-            <SkillTile skill={skill} dim={dim} />
+          <li key={`${item.slot}:${item.name}`}>
+            <ItemCard item={item} slot={displaySlot(item.slot)} query={query} identity={lookup(item)} />
           </li>
         ))}
       </ul>
@@ -424,17 +279,54 @@ function SkillGroup({ title, skills, dim }: { title: string; skills: SkillPoint[
   )
 }
 
-function SkillTile({ skill, dim }: { skill: SkillPoint; dim?: boolean }) {
+function SkillsView({ snapshot }: { snapshot: Snapshot | null }) {
+  if (!snapshot) return <p>Refresh this character to load skills.</p>
+  const knowsEquip = snapshot.skills.some((skill) => typeof skill.equipped === "boolean")
+  const skills = orderSkills(snapshot.skills.filter((skill) => skill.category === "Active"), knowsEquip)
+  const stigma = orderSkills(snapshot.skills.filter((skill) => skill.category === "Dp"), knowsEquip)
+  return (
+    <div className="gear-stack">
+      <SkillGroup title="Skills" skills={skills} markEquip={knowsEquip} />
+      <SkillGroup title="Stigma" skills={stigma} markEquip={knowsEquip} />
+    </div>
+  )
+}
+
+function orderSkills(skills: SkillPoint[], knowsEquip: boolean): SkillPoint[] {
+  const visible = knowsEquip ? skills : skills.filter((skill) => skill.acquired)
+  const rank = (skill: SkillPoint) => (skill.equipped ? 0 : 1)
+  return visible.slice().sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+}
+
+function SkillGroup({ title, skills, markEquip }: { title: string; skills: SkillPoint[]; markEquip: boolean }) {
+  if (!skills.length) return null
+  return (
+    <section>
+      <h3>{title}</h3>
+      <ul className="skill-grid">
+        {skills.map((skill) => (
+          <li key={`${skill.category}:${skill.name}`}>
+            <SkillTile skill={skill} markEquip={markEquip} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function SkillTile({ skill, markEquip }: { skill: SkillPoint; markEquip: boolean }) {
+  const equipped = markEquip && skill.equipped === true
   const badge = skill.acquired ? String(skill.level) : skill.needLevel != null ? String(skill.needLevel) : undefined
   const tip = [
     skillCategoryLabel(skill.category),
     skill.name,
     skill.acquired ? `Level ${skill.level}` : "Not acquired",
     skill.needLevel != null ? `Requires level ${skill.needLevel}` : "",
-    skill.equipped ? "Equipped" : "",
+    equipped ? "Equipped" : "",
   ].filter(Boolean).join(" · ")
+  const className = equipped ? "skill-tile equipped" : markEquip ? "skill-tile dim" : "skill-tile"
   return (
-    <div className={dim ? "skill-tile dim" : "skill-tile"}>
+    <div className={className}>
       <GameIcon src={skill.icon} label={skill.name} badge={badge} tip={tip} />
       <span className="skill-name">{skill.name}</span>
     </div>
@@ -455,38 +347,34 @@ function DaevanionView({
   const skillEffects = (snapshot.effects ?? []).filter((effect) => effect.kind === "skill")
   const statEffects = (snapshot.effects ?? []).filter((effect) => effect.kind === "stat" && effect.boardId === selected?.id)
   return (
-    <section className="panel">
-      <h3>Daevanion</h3>
-      {boards.length ? (
-        <div className="board-chips" role="tablist">
-          {boards.map((board) => (
-            <button
-              key={board.id}
-              type="button"
-              className="board-chip"
-              role="tab"
-              aria-selected={selected?.id === board.id}
-              onClick={() => onSelect(board.id)}
-            >
-              <strong>{board.name}</strong>
-              <span className="muted">{board.open ? `${board.openNodeCount}/${board.totalNodeCount}` : "Locked"}</span>
-              <span className="meter slim" aria-hidden="true">
-                <span style={{ width: `${board.open ? Math.max(0, Math.min(100, board.openPercent)) : 0}%` }} />
-              </span>
-            </button>
-          ))}
+    <div className="board-layout">
+      <div className="board-chart">
+        {boards.length ? (
+          <select
+            aria-label="Daevanion board"
+            value={selected ? String(selected.id) : ""}
+            onChange={(event) => onSelect(Number(event.target.value))}
+          >
+            {boards.map((board) => (
+              <option key={board.id} value={board.id}>
+                {board.name} · {board.open ? `${board.openNodeCount}/${board.totalNodeCount}` : "Locked"}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <div className="board-grid-wrap">
+          {selected ? <BoardGrid board={selected} /> : <p>No boards on this snapshot.</p>}
         </div>
-      ) : <p>No boards on this snapshot.</p>}
-      {selected ? (
-        <div className="board-stage">
-          <BoardGrid board={selected} />
-          <div className="effect-list">
-            <h4>Active effects ({skillEffects.length})</h4>
+      </div>
+      <div className="board-effects">
+        <div className="effect-block">
+          <h4>Active effects ({skillEffects.length})</h4>
+          <div className="effect-scroll">
             {snapshot.effects ? (
               skillEffects.length ? (
-                <ul>
+                <ul className="effect-list">
                   {skillEffects.map((effect) => (
-                    <li key={`${effect.boardId}:${effect.desc}`} className={effect.boardId === selected.id ? "current" : undefined}>
+                    <li key={`${effect.boardId}:${effect.desc}`} className={effect.boardId === selected?.id ? "current" : undefined}>
                       <span>{effect.desc}</span>
                       <span className="muted">{effect.boardName}</span>
                     </li>
@@ -494,20 +382,22 @@ function DaevanionView({
                 </ul>
               ) : <p className="muted">No open skill effects.</p>
             ) : <p className="muted">Refresh to load active effects.</p>}
-            {statEffects.length ? (
-              <>
-                <h4>{selected.name} stats</h4>
-                <ul>
-                  {statEffects.map((effect) => (
-                    <li key={`${effect.boardId}:${effect.desc}`}><span>{effect.desc}</span></li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
           </div>
         </div>
-      ) : null}
-    </section>
+        {statEffects.length ? (
+          <div className="effect-block">
+            <h4>{selected?.name} stats</h4>
+            <div className="effect-scroll">
+              <ul className="effect-list">
+                {statEffects.map((effect) => (
+                  <li key={`${effect.boardId}:${effect.desc}`}><span>{effect.desc}</span></li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
   )
 }
 
@@ -554,19 +444,12 @@ function Companion({ name, icon, detail }: { name: string; icon?: string; detail
   )
 }
 
-function clockPart(value: string): number | null {
-  const trimmed = value.trim()
-  if (!trimmed) return 0
-  if (!/^\d+$/.test(trimmed)) return null
-  return Number(trimmed)
-}
-
 function displaySlot(slot: string): string {
   return SLOT_DISPLAY[slot] ?? slotLabel(slot)
 }
 
 function gradeClass(grade: string): string {
-  const known = ["Unique", "Legend", "Rare", "Special", "Common", "None"]
+  const known = ["Mythic", "Epic", "Unique", "Legend", "Rare", "Special", "Common", "None"]
   return known.includes(grade) ? `grade-${grade.toLowerCase()}` : ""
 }
 

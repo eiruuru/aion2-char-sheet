@@ -1,7 +1,7 @@
 {
   "name": "aion2-tracker",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local Aion 2 roster tracker. It shows today's tasks, gear, skills, and Daevanion boards, and keeps Odyle and bank readings on their own clocks.",
   "type": "module",
   "main": "electron/main.cjs",
@@ -11,9 +11,14 @@
     "preview": "vite preview",
     "test": "vitest run",
     "desktop": "npm run build && electron .",
-    "dist:windows": "npm run build && electron-builder --win zip --x64 && node electron/copy-download.cjs"
+    "dist:windows": "npm run build && electron-builder --win nsis --x64"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eiruuru/aion2-char-sheet.git"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
@@ -46,12 +51,25 @@
       }
     ],
     "asar": true,
-    "electronLanguages": ["en-US"],
+    "electronLanguages": [
+      "en-US"
+    ],
     "afterPack": "electron/after-pack.cjs",
+    "publish": {
+      "provider": "github",
+      "owner": "eiruuru",
+      "repo": "aion2-char-sheet"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false
+    },
     "win": {
+      "signAndEditExecutable": false,
       "target": [
         {
-          "target": "zip",
+          "target": "nsis",
           "arch": [
             "x64"
           ]

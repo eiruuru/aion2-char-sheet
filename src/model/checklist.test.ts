@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  characterGoals,
   emptyProgress,
   rowsForCharacter,
   sessionItems,
@@ -67,7 +68,6 @@ describe("assignment", () => {
 
   it("keeps gearing content on a character under 1400", () => {
     const rows = rowsForCharacter(gearing, [main, gearing], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
-    expect(rows.find((row) => row.taskId === "odyle-cubes")?.name).toBe("Krao Cave cubes")
     expect(rows.some((row) => row.taskId === "krao")).toBe(true)
     expect(rows.some((row) => row.taskId === "field-bosses")).toBe(true)
     expect(rows.some((row) => row.taskId.startsWith("raid-"))).toBe(false)
@@ -77,7 +77,6 @@ describe("assignment", () => {
   it("switches a 1400 character to raids and drops the gearing list", () => {
     const rows = rowsForCharacter(ready, [main, ready], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
     expect(rows.some((row) => row.taskId === "raid-ludra")).toBe(true)
-    expect(rows.find((row) => row.taskId === "odyle-cubes")?.name).toBe("Conquest cubes")
     expect(rows.some((row) => row.taskId === "krao" || row.taskId === "urugugu" || row.taskId === "field-bosses" || row.taskId === "growth-graveyard")).toBe(false)
   })
 
@@ -106,15 +105,22 @@ describe("assignment", () => {
     expect(rows.find((row) => row.taskId === "shugo")?.bankCap).toBe(12)
     const member = rowsForCharacter(main, [main], emptyProgress(FAR_FROM_RESET), true, FAR_FROM_RESET)
     expect(member.find((row) => row.taskId === "odyle-buy-char")?.cap).toBe(20)
+    expect(member.find((row) => row.taskId === "odyle-buy-char")?.parts.map((part) => part.cap)).toEqual([20])
     expect(member.some((row) => row.taskId === "odyle-buy-server")).toBe(false)
     expect(member.find((row) => row.taskId === "shugo")?.bankCap).toBe(21)
   })
 
-  it("names Krao cubes for a gearing alt and Conquest cubes for the main", () => {
-    const alt = rowsForCharacter(gearing, [main, gearing], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
-    expect(alt.find((row) => row.taskId === "odyle-cubes")?.name).toBe("Krao Cave cubes")
-    const owner = rowsForCharacter(main, [main, gearing], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
-    expect(owner.find((row) => row.taskId === "odyle-cubes")?.name).toBe("Conquest cubes")
+  it("keeps Abyss at 7 hours total and lists the seasonal event separately", () => {
+    const member = rowsForCharacter(main, [main], emptyProgress(FAR_FROM_RESET), true, FAR_FROM_RESET)
+    const abyss = member.filter((row) => row.taskId === "abyss" || row.name.includes("Reshanta"))
+    expect(abyss).toHaveLength(1)
+    expect(abyss[0].cap).toBe(7)
+    expect(abyss[0].cadence).toBe("weekly")
+    const season = member.filter((row) => row.cadence === "season")
+    expect(season.map((row) => row.taskId)).toContain("season-rift-kina")
+    expect(season.find((row) => row.taskId === "season-rift-kina")?.cap).toBe(7)
+    expect(season.find((row) => row.taskId === "season-shop-chest")?.cap).toBe(1)
+    expect(member.filter((row) => row.cadence === "weekly").some((row) => row.taskId.startsWith("season-"))).toBe(false)
   })
 })
 
@@ -128,16 +134,6 @@ describe("urgency", () => {
     progress = setTaskBank(progress, "nightmare", main, 14, false, FAR_FROM_RESET)
     row = rowsForCharacter(main, [main], progress, false, FAR_FROM_RESET).find((item) => item.taskId === "nightmare")
     expect(row?.urgency).toBe("do-now")
-  })
-
-  it("spends Odyle cubes when the pool is near the cap", () => {
-    const waiting = rowsForCharacter(main, [main], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
-      .find((row) => row.taskId === "odyle-cubes")
-    expect(waiting?.urgency).toBe("can-wait")
-    const near = character({ ...main, odyleNearCap: true })
-    const spending = rowsForCharacter(near, [near], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
-      .find((row) => row.taskId === "odyle-cubes")
-    expect(spending?.urgency).toBe("do-now")
   })
 
   it("flags an open daily that does not bank inside 6 hours of reset", () => {
@@ -173,6 +169,16 @@ describe("progress", () => {
     const nextDay = Date.parse("2026-10-15T07:00:00.000Z")
     const row = rowsForCharacter(main, [main], saved, false, nextDay).find((item) => item.taskId === "duty")
     expect(row?.count).toBe(0)
+  })
+
+  it("clears weekly seasonal limits on Wednesday and keeps the event chest", () => {
+    const main = character({ id: "main", name: "Nairen", role: "main" })
+    let saved = setTaskCount(emptyProgress(FAR_FROM_RESET), "season-shop-odyle", main, 4, false, FAR_FROM_RESET)
+    saved = setTaskCount(saved, "season-shop-chest", main, 1, false, FAR_FROM_RESET)
+    const nextWeek = Date.parse("2026-10-21T07:00:00.000Z")
+    const rows = rowsForCharacter(main, [main], saved, false, nextWeek)
+    expect(rows.find((item) => item.taskId === "season-shop-odyle")?.count).toBe(0)
+    expect(rows.find((item) => item.taskId === "season-shop-chest")?.count).toBe(1)
   })
 
   it("shows Daily Dungeon as 14 weekly boxes and completes it when the week is full", () => {
@@ -238,14 +244,14 @@ describe("banks", () => {
     expect(row?.bank).toBe(0)
   })
 
-  it("adds a Conquest charge every 8 hours and keeps that clock when one is spent", () => {
-    const saved = setTaskBank(emptyProgress(FAR_FROM_RESET), "conquest-charges", main, 10, false, FAR_FROM_RESET)
-    const later = FAR_FROM_RESET + 8 * 60 * 60 * 1000
-    expect(rowsForCharacter(main, [main], saved, false, later).find((row) => row.taskId === "conquest-charges")?.bank).toBe(11)
-    const halfway = FAR_FROM_RESET + 4 * 60 * 60 * 1000
-    const spent = setTaskCount(saved, "conquest-charges", main, 1, false, halfway)
-    const afterTick = halfway + 4 * 60 * 60 * 1000
-    const row = rowsForCharacter(main, [main], spent, false, afterTick).find((item) => item.taskId === "conquest-charges")
+  it("adds a Transcendence charge every 12 hours and keeps that clock when one is spent", () => {
+    const saved = setTaskBank(emptyProgress(FAR_FROM_RESET), "transcendence", main, 10, false, FAR_FROM_RESET)
+    const later = FAR_FROM_RESET + 12 * 60 * 60 * 1000
+    expect(rowsForCharacter(main, [main], saved, false, later).find((row) => row.taskId === "transcendence")?.bank).toBe(11)
+    const halfway = FAR_FROM_RESET + 6 * 60 * 60 * 1000
+    const spent = setTaskCount(saved, "transcendence", main, 1, false, halfway)
+    const afterTick = halfway + 6 * 60 * 60 * 1000
+    const row = rowsForCharacter(main, [main], spent, false, afterTick).find((item) => item.taskId === "transcendence")
     expect(row?.bank).toBe(10)
     expect(row?.count).toBe(1)
   })
@@ -276,14 +282,15 @@ describe("banks", () => {
 })
 
 describe("today list", () => {
-  it("puts overflow first and leaves banked tasks off the list", () => {
-    const main = character({ id: "main", name: "Nairen", role: "main", odyleNearCap: true })
-    const items = sessionItems([main], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
+  it("puts a full bank first and leaves an unset bank off the overflow list", () => {
+    const main = character({ id: "main", name: "Nairen", role: "main" })
+    const full = setTaskBank(emptyProgress(FAR_FROM_RESET), "nightmare", main, 14, false, FAR_FROM_RESET)
+    const items = sessionItems([main], full, false, FAR_FROM_RESET)
     expect(items[0]?.band).toBe("lost")
-    expect(items[0]?.title).toContain("Conquest cubes")
-    expect(items.some((item) => item.title.includes("Nightmare"))).toBe(false)
-    expect(items.some((item) => item.title.includes("Supply Request"))).toBe(true)
-    expect(items.some((item) => item.band === "week")).toBe(false)
+    expect(items[0]?.title).toContain("Nightmare")
+    const unset = sessionItems([main], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
+    expect(unset.some((item) => item.band === "lost" && item.title.includes("Nightmare"))).toBe(false)
+    expect(unset.some((item) => item.title.includes("Supply Request"))).toBe(true)
   })
 
   it("keeps Wednesday leftovers as tasks with the character who still needs them", () => {
@@ -294,5 +301,40 @@ describe("today list", () => {
     expect(week.some((item) => item.taskName === "Krao Cave" && item.characterId === "alt")).toBe(true)
     expect(week.some((item) => item.taskName === "Krao Cave" && item.characterId === "main")).toBe(false)
     expect(week.some((item) => item.characterId === "alt" && item.taskName.startsWith("Raid"))).toBe(false)
+  })
+})
+
+describe("goals", () => {
+  const main = character({ id: "main", name: "Nairen", role: "main", itemLevel: 1700 })
+  const names = (lines: { title: string }[]) => lines.map((line) => line.title)
+
+  it("keeps unfinished dailies on Today and weeklies for later when Wednesday is days away", () => {
+    const rows = rowsForCharacter(main, [main], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
+    const goals = characterGoals(rows, FAR_FROM_RESET, null)
+    expect(names(goals.today)).toContain("Supply Request")
+    expect(names(goals.today)).not.toContain("Ascension Trial")
+    expect(names(goals.later)).toContain("Ascension Trial")
+    expect(names([...goals.today, ...goals.later])).not.toContain("Weekly shops")
+  })
+
+  it("moves a weekly onto Today inside two days of Wednesday", () => {
+    const rows = rowsForCharacter(main, [main], emptyProgress(TUE_BURN), false, TUE_BURN)
+    const goals = characterGoals(rows, TUE_BURN, null)
+    expect(names(goals.today)).toContain("Ascension Trial")
+  })
+
+  it("hides a token task with an empty bank and keeps one whose bank was never set", () => {
+    const emptyBank = setTaskBank(emptyProgress(FAR_FROM_RESET), "nightmare", main, 0, false, FAR_FROM_RESET)
+    const hidden = characterGoals(rowsForCharacter(main, [main], emptyBank, false, FAR_FROM_RESET), FAR_FROM_RESET, null)
+    expect(names([...hidden.today, ...hidden.later])).not.toContain("Nightmare")
+    const unset = characterGoals(rowsForCharacter(main, [main], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET), FAR_FROM_RESET, null)
+    expect(names([...unset.today, ...unset.later])).toContain("Nightmare")
+  })
+
+  it("puts Odyle on Today when it caps inside 24 hours and leaves it off when the cap is days away", () => {
+    const soon = characterGoals([], FAR_FROM_RESET, { full: false, aboveCap: false, fullAt: FAR_FROM_RESET + 24 * 60 * 60 * 1000 })
+    expect(names(soon.today)).toContain("Odyle energy")
+    const later = characterGoals([], FAR_FROM_RESET, { full: false, aboveCap: false, fullAt: FAR_FROM_RESET + 5 * 24 * 60 * 60 * 1000 })
+    expect(names([...later.today, ...later.later])).not.toContain("Odyle energy")
   })
 })

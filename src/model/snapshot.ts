@@ -23,6 +23,8 @@ export type GearPoint = {
   exceed?: number
   grade: string
   icon?: string
+  id?: number
+  slotPos?: number
 }
 
 export type SkillPoint = {
@@ -115,6 +117,8 @@ function mapGear(item: EquipmentItem): GearPoint {
     exceed: item.exceedLevel,
     grade: item.grade,
     icon: keptIcon(item.icon),
+    id: item.id,
+    slotPos: item.slotPos,
   }
 }
 

@@ -72,6 +72,8 @@ describe("snapshot icons", () => {
     const snapshot = buildSnapshot(info("https://profileimg.plaync.com/portrait", icon), equipment(icon), [])
     expect(snapshot.portrait).toBe("https://profileimg.plaync.com/portrait")
     expect(snapshot.gear[0].icon).toBe(icon)
+    expect(snapshot.gear[0].id).toBe(1)
+    expect(snapshot.gear[0].slotPos).toBe(1)
     expect(snapshot.skills[0].icon).toBe(icon)
     expect(snapshot.boards[0].icon).toBe(icon)
   })

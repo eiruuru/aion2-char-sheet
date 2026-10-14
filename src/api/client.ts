@@ -1,6 +1,8 @@
+import { playClassesFrom, type PcClassRow, type PlayClass } from "./classes"
 import type {
   CharacterInfo,
   DaevanionDetail,
+  EquipmentItemDetail,
   EquipmentResponse,
   RegionId,
   SearchHit,
@@ -9,6 +11,7 @@ import type {
 const SEARCH_BASE = "/nc-search/aion2global/search/v2/character"
 const INFO_BASE = "/nc-aion/api/character/info"
 const EQUIP_BASE = "/nc-aion/api/character/equipment"
+const ITEM_BASE = "/nc-aion/api/character/equipment/item"
 const BOARD_BASE = "/nc-aion/api/character/daevanion/detail"
 
 export function normalizeCharacterId(id: string): string {
@@ -44,26 +47,56 @@ async function getJson<T>(path: string, params: Record<string, string | number |
   }
 }
 
+export const SEARCH_PAGE_SIZE = 10
+
+export type SearchPage = {
+  hits: SearchHit[]
+  page: number
+  total: number
+  endPage: number
+}
+
+let playClasses: Promise<Map<number, PlayClass>> | null = null
+
+export function loadPlayClasses(): Promise<Map<number, PlayClass>> {
+  if (!playClasses) {
+    playClasses = getJson<{ pcDataList?: PcClassRow[] }>("/nc-aion/api/gameinfo/pcdata", { lang: "en" })
+      .then((data) => playClassesFrom(data.pcDataList ?? []))
+      .catch((error) => {
+        playClasses = null
+        throw error
+      })
+  }
+  return playClasses
+}
+
 export async function searchCharacters(input: {
   keyword: string
   region: RegionId
   serverId?: number
-}): Promise<SearchHit[]> {
-  const data = await getJson<{ list: SearchHit[] }>(SEARCH_BASE, {
+  page?: number
+}): Promise<SearchPage> {
+  const page = input.page ?? 1
+  const data = await getJson<{ list?: SearchHit[]; pagination?: { page?: number; total?: number; endPage?: number } }>(SEARCH_BASE, {
     keyword: input.keyword.trim(),
     region: input.region,
     localeInfo: "en-US",
     serverId: input.serverId,
-    page: 1,
-    size: 20,
-    sort: "level",
+    page,
+    size: SEARCH_PAGE_SIZE,
   })
-  return (data.list ?? []).map((hit) => ({
+  const hits = (data.list ?? []).map((hit) => ({
     ...hit,
     characterId: normalizeCharacterId(hit.characterId),
     name: plainName(hit.name),
     region: hit.region || input.region,
   }))
+  return {
+    hits,
+    page: data.pagination?.page ?? page,
+    total: data.pagination?.total ?? hits.length,
+    endPage: Math.max(1, data.pagination?.endPage ?? 1),
+  }
 }
 
 export async function fetchCharacterInfo(
@@ -89,6 +122,23 @@ export async function fetchEquipment(
     region,
     serverId,
     characterId: normalizeCharacterId(characterId),
+  })
+}
+
+export async function fetchEquipmentItem(
+  region: RegionId,
+  serverId: number,
+  characterId: string,
+  item: { id: number; enchant: number; slotPos: number },
+): Promise<EquipmentItemDetail> {
+  return getJson<EquipmentItemDetail>(ITEM_BASE, {
+    id: item.id,
+    enchantLevel: item.enchant,
+    characterId: normalizeCharacterId(characterId),
+    serverId,
+    slotPos: item.slotPos,
+    lang: "en-US",
+    region,
   })
 }
 

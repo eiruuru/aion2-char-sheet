@@ -5,7 +5,6 @@ import { buildSnapshot } from "./model/snapshot"
 import {
   applyBoxChange,
   rowsForCharacter,
-  sessionItems,
   setTaskBank,
   type ChecklistCharacter,
   type MarkOwner,
@@ -27,7 +26,8 @@ import { CUBE_COST, odyleCap, projectOdyle, shiftOdyleClock, spendOdyleReading }
 import { desktopBridge } from "./desktop"
 import { AddCharacter } from "./ui/AddCharacter"
 import { CharacterPanel } from "./ui/CharacterPanel"
-import { SessionStrip } from "./ui/Checklist"
+import { GoalsPanel } from "./ui/Goals"
+import { ExportIcon, ImportIcon, MembershipIcon, PinIcon, TrashIcon } from "./ui/icons"
 
 const REFRESH_MS = 20 * 60 * 1000
 let profileRefresh: Promise<void> | null = null
@@ -38,6 +38,7 @@ export function App() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [adding, setAdding] = useState(false)
+  const [focusToken, setFocusToken] = useState(0)
   const [now, setNow] = useState(() => Date.now())
   const [aboveGame, setAboveGame] = useState(false)
   const desktop = desktopBridge()
@@ -153,6 +154,11 @@ export function App() {
       setError(`${hit.name} is already on the roster.`)
       return
     }
+    const onServer = store.characters.filter((character) => character.region === region && character.serverId === hit.serverId)
+    if (onServer.length >= SERVER_SLOTS) {
+      setError(`${hit.serverName} already has ${SERVER_SLOTS} characters.`)
+      return
+    }
     const record: CharacterRecord = {
       id,
       characterId: hit.characterId,
@@ -237,11 +243,17 @@ export function App() {
   function removeSelected() {
     if (!selected) return
     if (!window.confirm(`Remove ${selected.name} from this tracker?`)) return
+    const remaining = store.characters.filter((character) => character.id !== selected.id)
     setStore((current) => ({
       ...current,
       characters: current.characters.filter((character) => character.id !== selected.id),
     }))
     setSelectedId(null)
+    window.focus()
+    if (remaining.length === 0) {
+      setAdding(true)
+      setFocusToken((token) => token + 1)
+    }
   }
 
   function exportFile() {
@@ -278,13 +290,14 @@ export function App() {
   const suggestions = selected ? characterSuggestions(selected, store.characters, store.membership, now) : []
   const checklistRoster = store.characters.map((character) => toChecklistCharacter(character, store.membership, now))
   const progress = store.checklist ?? normalizeStore(store, now).checklist!
-  const session = sessionItems(checklistRoster, progress, store.membership, now)
   const selectedChecklist = selected
     ? checklistRoster.find((character) => character.id === selected.id) ?? null
     : null
   const checklistRows = selectedChecklist
     ? rowsForCharacter(selectedChecklist, checklistRoster, progress, store.membership, now)
     : []
+  const names = Object.fromEntries(store.characters.map((character) => [character.id, character.name]))
+  const roles = Object.fromEntries(store.characters.map((character) => [character.id, character.role]))
 
   function changeBank(taskId: string, value: number) {
     if (!selected) return
@@ -301,34 +314,40 @@ export function App() {
       <header className="top">
         <div>
           <p className="eyebrow">Local roster</p>
-          <h1>Aion 2 progress</h1>
+          <h1>AION 2 Character Sheet</h1>
         </div>
         <div className="actions">
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={store.membership}
-              onChange={(event) => setStore((current) => ({ ...current, membership: event.target.checked }))}
-            />
-            Special Quai Membership (Odyle cap {store.membership ? "840" : "560"})
-          </label>
+          <button
+            type="button"
+            className={store.membership ? "icon-button" : "icon-button ghost"}
+            aria-pressed={store.membership}
+            aria-label={`Special Quai Membership, Odyle cap ${store.membership ? "840" : "560"}`}
+            title={`Special Quai Membership (Odyle cap ${store.membership ? "840" : "560"})`}
+            onClick={() => setStore((current) => ({ ...current, membership: !current.membership }))}
+          >
+            <MembershipIcon />
+          </button>
           {desktop && (
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={aboveGame}
-                onChange={(event) => {
-                  const on = event.target.checked
-                  setAboveGame(on)
-                  void desktop.setAlwaysOnTop(on)
-                }}
-              />
-              Keep this window above the game
-            </label>
+            <button
+              type="button"
+              className={aboveGame ? "icon-button" : "icon-button ghost"}
+              aria-pressed={aboveGame}
+              aria-label="Keep this window above the game"
+              title="Keep this window above the game"
+              onClick={() => {
+                const on = !aboveGame
+                setAboveGame(on)
+                void desktop.setAlwaysOnTop(on)
+              }}
+            >
+              <PinIcon />
+            </button>
           )}
-          <button type="button" onClick={exportFile}>Export</button>
-          <label className="file">
-            Import
+          <button type="button" className="icon-button ghost" aria-label="Export" title="Export" onClick={exportFile}>
+            <ExportIcon />
+          </button>
+          <label className="icon-button ghost file" title="Import" aria-label="Import">
+            <ImportIcon />
             <input
               type="file"
               accept="application/json"
@@ -339,65 +358,117 @@ export function App() {
               }}
             />
           </label>
-          <button type="button" className="ghost" onClick={() => {
+          <button type="button" className="icon-button ghost" aria-label="Clear" title="Clear" onClick={() => {
             if (!window.confirm(desktop ? "Clear every saved character in this app?" : "Clear every saved character on this browser?")) return
             setStore(emptyStore())
             setSelectedId(null)
           }}>
-            Clear
+            <TrashIcon />
           </button>
         </div>
       </header>
       {error ? <p className="error banner">{error}</p> : null}
-      <SessionStrip items={session} now={now} onOpen={setSelectedId} />
-      <section className="roster-bar panel">
-        <div className="who">
-          {ordered.map((character) => (
-            <button
-              key={character.id}
-              type="button"
-              className={character.id === selected?.id ? "selected" : undefined}
-              title={character.name}
-              aria-label={character.name}
-              aria-pressed={character.id === selected?.id}
-              onClick={() => setSelectedId(character.id)}
-            >
-              {character.latest?.portrait ? <img src={character.latest.portrait} alt="" /> : <span className="initial">{character.name.slice(0, 1)}</span>}
-            </button>
-          ))}
-          <button type="button" className="add-character" onClick={() => setAdding((open) => !open)}>
-            {adding ? "Close" : "Add"}
-          </button>
+      <div className="workspace">
+        <div className="character-column">
+          <section className="roster-bar panel">
+            {rosterGroups(ordered).map((group) => (
+              <div className="who" key={group.key}>
+                {group.slots.map((slot, index) => slot.kind === "character" ? (
+                  <button
+                    key={slot.character.id}
+                    type="button"
+                    className={["roster-pick", rosterTone(slot.character, store.characters), slot.character.id === selected?.id ? "selected" : ""].filter(Boolean).join(" ")}
+                    title={`${slot.character.name} · ${slot.character.role === "main" ? "Main" : "Alt"}`}
+                    aria-label={`${slot.character.name}, ${slot.character.role === "main" ? "main" : "alt"}`}
+                    aria-pressed={slot.character.id === selected?.id}
+                    onClick={() => setSelectedId(slot.character.id)}
+                  >
+                    {slot.character.latest?.portrait ? <img src={slot.character.latest.portrait} alt="" /> : <span className="initial">{slot.character.name.slice(0, 1)}</span>}
+                  </button>
+                ) : (
+                  <button
+                    key={`${group.key}-slot-${index}`}
+                    type="button"
+                    className={slot.kind === "premium" ? "roster-slot premium" : "roster-slot"}
+                    aria-label={slot.kind === "premium" ? "Premium character slot" : "Empty character slot"}
+                    title={slot.kind === "premium" ? "Bought in-game with premium currency" : "Empty slot"}
+                    onClick={() => setAdding((open) => !open)}
+                  >
+                    <span className="slot-face" />
+                  </button>
+                ))}
+              </div>
+            ))}
+          </section>
+          {adding ? <AddCharacter onAdd={addCharacter} focusToken={focusToken} /> : null}
+          {selected ? (
+            <CharacterPanel
+              character={selected}
+              busy={busyId === selected.id}
+              onRefresh={() => void refreshRecord(selected)}
+              onDelete={removeSelected}
+              onSetMain={makeMain}
+              checklistRows={checklistRows}
+              names={names}
+              roles={roles}
+              onChecklistBoxes={changeBoxes}
+              onChecklistBank={changeBank}
+            />
+          ) : (
+            <section className="panel empty">
+              <h2>Track the main, then the alts</h2>
+              <p>Search the public character profile, pin who you play, and the page will rank Daevanion, gear, and skill gaps. Odyle still needs a number from the game so you can see who is about to cap.</p>
+            </section>
+          )}
         </div>
-      </section>
-      {adding ? <AddCharacter onAdd={addCharacter} /> : null}
-      {selected ? (
-        <CharacterPanel
+        <GoalsPanel
           character={selected}
+          rows={checklistRows}
           suggestions={suggestions}
           projection={projection}
           now={now}
-          busy={busyId === selected.id}
-          onRefresh={() => void refreshRecord(selected)}
-          onDelete={removeSelected}
-          onSetMain={makeMain}
           onSaveOdyle={saveOdyle}
           onSetOdyleTimer={setOdyleTimer}
           onSpendCube={spendCube}
-          checklistRows={checklistRows}
-          names={Object.fromEntries(store.characters.map((character) => [character.id, character.name]))}
-          roles={Object.fromEntries(store.characters.map((character) => [character.id, character.role]))}
-          onChecklistBoxes={changeBoxes}
-          onChecklistBank={changeBank}
         />
-      ) : (
-        <section className="panel empty">
-          <h2>Track the main, then the alts</h2>
-          <p>Search the public character profile, pin who you play, and the page will rank Daevanion, gear, and skill gaps. Odyle still needs a number from the game so you can see who is about to cap.</p>
-        </section>
-      )}
+      </div>
     </div>
   )
+}
+
+const SERVER_SLOTS = 6
+const FREE_SLOTS = 4
+
+type RosterSlot =
+  | { kind: "character"; character: CharacterRecord }
+  | { kind: "free" }
+  | { kind: "premium" }
+
+function rosterGroups(characters: CharacterRecord[]): { key: string; slots: RosterSlot[] }[] {
+  const groups = new Map<string, CharacterRecord[]>()
+  for (const character of characters) {
+    const key = `${character.region}:${character.serverId}`
+    const list = groups.get(key) ?? []
+    list.push(character)
+    groups.set(key, list)
+  }
+  if (!groups.size) groups.set("empty", [])
+  return [...groups.entries()].map(([key, list]) => ({ key, slots: serverSlots(list) }))
+}
+
+function serverSlots(characters: CharacterRecord[]): RosterSlot[] {
+  const slots: RosterSlot[] = characters.map((character) => ({ kind: "character", character }))
+  if (slots.length >= SERVER_SLOTS) return slots
+  while (slots.length < FREE_SLOTS) slots.push({ kind: "free" })
+  while (slots.length < SERVER_SLOTS) slots.push({ kind: "premium" })
+  return slots
+}
+
+function rosterTone(character: CharacterRecord, characters: CharacterRecord[]): string {
+  if (character.role === "main") return "role-main"
+  const alts = characters.filter((entry) => entry.role !== "main").map((entry) => entry.id).sort()
+  const index = alts.indexOf(character.id)
+  return `role-${index >= 0 ? index % 6 : 0}`
 }
 
 function toChecklistCharacter(character: CharacterRecord, membership: boolean, now: number): ChecklistCharacter {

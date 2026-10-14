@@ -1,95 +1,7 @@
-import { useState } from "react"
-import type { ChecklistRow, MarkOwner, SessionItem } from "../model/checklist"
-import { formatCountdown } from "../model/format"
-import { nextDailyReset, nextWeeklyReset, upcomingBosses } from "../model/schedule"
-
-const BANDS = [
-  { id: "lost", label: "Do now" },
-  { id: "today", label: "Still today" },
-  { id: "week", label: "Before Wednesday" },
-] as const
-
-export function SessionStrip({
-  items,
-  now,
-  onOpen,
-}: {
-  items: SessionItem[]
-  now: number
-  onOpen: (characterId: string) => void
-}) {
-  const [open, setOpen] = useState(true)
-  const bosses = upcomingBosses(now)
-  const bands = BANDS.map((band) => ({
-    ...band,
-    groups: groupByTask(items.filter((item) => item.band === band.id)),
-  })).filter((band) => band.groups.length)
-  const dailyLeft = formatCountdown(nextDailyReset(now) - now)
-  const weeklyLeft = formatCountdown(nextWeeklyReset(now) - now)
-  return (
-    <section className="panel session">
-      <details className="today-fold" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-        <summary>
-          <span className="roster-top">
-            <h2>Today</h2>
-            <span className="muted">Daily reset in {dailyLeft} · Weekly reset in {weeklyLeft}</span>
-          </span>
-          <span className="muted boss-line">
-            {bosses.map((boss) => `${boss.name} ${formatCountdown(boss.at - now)}`).join(" · ")}
-          </span>
-        </summary>
-        {bands.length ? (
-          <div className="today-bands">
-            {bands.map((band) => (
-              <div key={band.id}>
-                <h3 className="group-label">{band.label}</h3>
-                <div className="today-grid">
-                  {band.groups.map(([taskName, people]) => {
-                    const shared = people[0]?.shared
-                    return (
-                      <article key={taskName} className="task-card">
-                        <h3>
-                          {people[0]?.icon ? <img className="content-icon" src={people[0].icon} alt="" /> : null}
-                          <span>{taskName}</span>
-                          {shared ? <span className="muted">{people[0].count}/{people[0].cap}</span> : null}
-                        </h3>
-                        <div className="who">
-                          {people.map((person) => (
-                            person.characterId ? (
-                              <button key={person.id} type="button" title={person.characterName ?? person.detail} aria-label={person.characterName ?? person.detail} onClick={() => onOpen(person.characterId!)}>
-                                {person.portrait ? <img src={person.portrait} alt="" /> : <span className="initial">{(person.characterName ?? "?").slice(0, 1)}</span>}
-                              </button>
-                            ) : (
-                              <span key={person.id}>{person.detail}</span>
-                            )
-                          ))}
-                        </div>
-                      </article>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p>Nothing left that has to be done today.</p>
-        )}
-      </details>
-    </section>
-  )
-}
-
-function groupByTask(items: SessionItem[]): [string, SessionItem[]][] {
-  const groups = new Map<string, SessionItem[]>()
-  for (const item of items) {
-    const list = groups.get(item.taskName) ?? []
-    list.push(item)
-    groups.set(item.taskName, list)
-  }
-  return [...groups.entries()]
-}
+import type { ChecklistRow, MarkOwner } from "../model/checklist"
 
 export function Checklist({
+  cadence,
   rows,
   level,
   names,
@@ -98,6 +10,7 @@ export function Checklist({
   onBoxes,
   onBank,
 }: {
+  cadence: "daily" | "weekly" | "season"
   rows: ChecklistRow[]
   level: number | null
   names: Record<string, string>
@@ -106,20 +19,17 @@ export function Checklist({
   onBoxes: (taskId: string, owners: MarkOwner[]) => void
   onBank: (taskId: string, value: number) => void
 }) {
+  const group = rows.filter((row) => row.cadence === cadence)
+  if (level == null) return <p>Refresh this character to place them on the daily and weekly list.</p>
+  if (level < 45) return <p>Under level 45, this character only levels. Server pools and the endgame checklist stay off until 45.</p>
+  if (!group.length) return <p className="muted">Nothing on this list.</p>
   return (
-    <section className="panel">
-      <h3>Checklist</h3>
-      {level == null ? (
-        <p>Refresh this character to place them on the daily and weekly list.</p>
-      ) : level < 45 ? (
-        <p>Under level 45, this character only levels. Server pools and the endgame checklist stay off until 45.</p>
-      ) : (
-        <div className="check-columns">
-          <TaskGroup title="Daily" rows={rows.filter((row) => row.cadence === "daily")} names={names} roles={roles} characterId={characterId} onBoxes={onBoxes} onBank={onBank} />
-          <TaskGroup title="Weekly" rows={rows.filter((row) => row.cadence === "weekly")} names={names} roles={roles} characterId={characterId} onBoxes={onBoxes} onBank={onBank} />
-        </div>
-      )}
-    </section>
+    <>
+      {cadence === "season" ? (
+        <p className="muted">Halloween runs through the Nov 4 maintenance. Conquerors of the Abyss rift stones run through the Oct 28 maintenance. Weekly limits clear Wednesday 3:00 PM.</p>
+      ) : null}
+      <TaskGroup title="" rows={group} names={names} roles={roles} characterId={characterId} onBoxes={onBoxes} onBank={onBank} />
+    </>
   )
 }
 
@@ -148,7 +58,7 @@ function TaskGroup({
   const rowProps = { names, roles, characterId, onBoxes, onBank }
   return (
     <div>
-      <h4 className="group-label">{title}</h4>
+      {title ? <h4 className="group-label">{title}</h4> : null}
       <ul className="checklist">
         {open.map((row) => (
           <Row key={row.taskId} row={row} {...rowProps} />

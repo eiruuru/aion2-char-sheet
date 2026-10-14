@@ -48,6 +48,6 @@ export function formatCountdown(ms: number): string {
 }
 
 export function skillCategoryLabel(category: string): string {
-  if (category === "Dp") return "Specialty"
+  if (category === "Dp") return "Stigma"
   return category
 }
