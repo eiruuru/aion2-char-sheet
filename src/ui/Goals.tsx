@@ -1,20 +1,14 @@
 import { useEffect, useRef, useState } from "react"
 import type { CharacterRecord } from "../model/store"
 import { parseStoredNumber } from "../model/store"
-import { formatCountdown, formatNumber, formatWhen } from "../model/format"
+import { formatCountdown, formatNumber } from "../model/format"
 import { CUBE_COST, type OdyleProjection } from "../model/odyle"
-import { characterGoals, type ChecklistRow, type GoalLine, type SessionItem } from "../model/checklist"
-import { PriorityMark } from "./Checklist"
-import { guideLines, loadClassGuide, type GuideSummary } from "../model/guides"
-import type { Suggestion } from "../model/suggestions"
-import { Sparkline } from "./Sparkline"
+import { rosterGoals, type SessionItem } from "../model/checklist"
 import { RefreshIcon } from "./icons"
 import { loadVideos, type VideoHit } from "../model/videos"
 
 export function GoalsPanel({
   character,
-  rows,
-  suggestions,
   projection,
   now,
   due,
@@ -24,8 +18,6 @@ export function GoalsPanel({
   onSpendCube,
 }: {
   character: CharacterRecord | null
-  rows: ChecklistRow[]
-  suggestions: Suggestion[]
   projection: OdyleProjection | null
   now: number
   due: SessionItem[]
@@ -34,8 +26,8 @@ export function GoalsPanel({
   onSetOdyleTimer: (remainingMs: number) => void
   onSpendCube: () => void
 }) {
-  const [tab, setTab] = useState<"goals" | "advice" | "class" | "general">("goals")
-  const goals = characterGoals(rows, now, projection)
+  const [tab, setTab] = useState<"goals" | "class" | "general">("goals")
+  const goals = rosterGoals(due, character?.id ?? null, projection, now)
   return (
     <aside className="side-column" data-tour="goals">
       {character ? (
@@ -51,104 +43,40 @@ export function GoalsPanel({
       <section className="goals panel">
         <div className="tabs" role="tablist" aria-label="Goals">
           <button type="button" role="tab" aria-selected={tab === "goals"} onClick={() => setTab("goals")}>Goals</button>
-          <button type="button" role="tab" aria-selected={tab === "advice"} onClick={() => setTab("advice")}>Advice</button>
           <button type="button" role="tab" aria-selected={tab === "class"} onClick={() => setTab("class")}>Class Guides</button>
           <button type="button" role="tab" aria-selected={tab === "general"} onClick={() => setTab("general")}>General Guides</button>
         </div>
         <div className="goals-scroll">
-          {tab === "advice" ? (
-            <AdviceView character={character} suggestions={suggestions} active />
-          ) : tab === "class" || tab === "general" ? (
+          {tab === "class" || tab === "general" ? (
             <VideosView kind={tab} character={character} active />
           ) : (
-            <>
-              {character ? null : <p className="muted">Add a character to track goals.</p>}
-              {due.length ? (
-                <section className="goal-group">
-                  <h3>Roster</h3>
-                  <ul className="quests">
-                    {due.map((item) => (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          className="roster-due"
-                          disabled={item.characterId == null}
-                          onClick={() => { if (item.characterId) onSelectCharacter(item.characterId) }}
-                        >
-                          <strong>{item.taskName}</strong>
-                          {item.characterName ? <span className="muted">{item.characterName}</span> : null}
-                          {item.detail ? <span className="muted">{item.detail}</span> : null}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ) : null}
-              <GoalGroup title="Today" lines={goals.today} empty="Nothing is due in the next two days." />
-              <GoalGroup title="Later" lines={goals.later} empty="No other open goals." />
-            </>
+            goals.length ? (
+              <ul className="quests roster-goals">
+                {goals.map((goal) => (
+                  <li key={goal.id}>
+                    <button
+                      type="button"
+                      className={goal.urgent ? "roster-due urgent" : "roster-due"}
+                      disabled={goal.characterId == null}
+                      onClick={() => { if (goal.characterId) onSelectCharacter(goal.characterId) }}
+                    >
+                      <span className="roster-due-top">
+                        <strong className={`priority-name priority-${goal.priority}`}>{goal.taskName}</strong>
+                        {goal.meta ? <span className="muted">{goal.meta}</span> : null}
+                      </span>
+                      {goal.detail ? <span className="roster-due-detail">{goal.detail}</span> : null}
+                      {goal.due ? <span className="roster-due-due">{goal.due}</span> : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted">{character ? "Nothing open." : "Add a character to track goals."}</p>
+            )
           )}
         </div>
       </section>
     </aside>
-  )
-}
-
-function AdviceView({ character, suggestions, active }: { character: CharacterRecord | null; suggestions: Suggestion[]; active: boolean }) {
-  const [guide, setGuide] = useState<GuideSummary | null>(null)
-  const className = character?.className ?? ""
-  const skills = character?.latest?.skills
-  useEffect(() => {
-    if (!active || !className || !skills?.length) return
-    let cancel = false
-    void loadClassGuide(className, skills.map((skill) => skill.name), localStorage).then((summary) => {
-      if (!cancel) setGuide(summary)
-    })
-    return () => { cancel = true }
-  }, [active, className, skills])
-  if (!character) return <p className="muted">Add a character to see advice.</p>
-  const snapshot = character.latest
-  const guides = guideLines(skills, guide, className)
-  return (
-    <>
-      <h3>Where to spend next</h3>
-      <ul className="suggestions">
-        {suggestions.length ? suggestions.map((suggestion) => (
-          <li key={suggestion.id}>
-            <strong>{suggestion.title}</strong>
-            <p>{suggestion.detail}</p>
-          </li>
-        )) : <li>Nothing to suggest until this character has a profile.</li>}
-      </ul>
-      {guides.length ? (
-        <>
-          <h3>From guides</h3>
-          <ul className="suggestions">
-            {guides.map((line) => (
-              <li key={line.id}>
-                <strong>{line.title}</strong>
-                <p>
-                  {line.detail}{" "}
-                  <a className="guide-link" href={line.href} target="_blank" rel="noreferrer">{line.linkLabel}</a>
-                </p>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-      <h3>Combat power</h3>
-      {snapshot ? (
-        <>
-          <Sparkline values={character.history.map((point) => point.combatPower)} />
-          {character.history.length >= 2 ? (
-            <p className="muted">
-              First saved reading {formatNumber(character.history[0].combatPower)} on {formatWhen(character.history[0].at)}.
-              Latest {formatNumber(snapshot.combatPower)}.
-            </p>
-          ) : null}
-        </>
-      ) : <p>Refresh this character to start a combat-power history.</p>}
-    </>
   )
 }
 
@@ -205,30 +133,6 @@ function VideosView({ kind, character, active }: { kind: "class" | "general"; ch
         </ul>
       ) : failed || (kind === "class" && !className) || busy ? null : <p className="muted">No Global videos for this search.</p>}
     </div>
-  )
-}
-
-function GoalGroup({ title, lines, empty }: { title: string; lines: GoalLine[]; empty: string }) {
-  return (
-    <section className="goal-group">
-      <h3>{title}</h3>
-      {lines.length ? (
-        <ul className="quests">
-          {lines.map((line) => (
-            <li key={line.id} className="quest">
-              <span className="quest-marks">
-                <PriorityMark priority={line.priority} />
-                {line.icon ? <img className="content-icon" src={line.icon} alt="" /> : <span className="content-icon" />}
-              </span>
-              <span className="quest-copy">
-                <strong className={`priority-name priority-${line.priority}`}>{line.title}</strong>
-                {line.detail ? <p className="muted">{line.detail}</p> : null}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : <p className="muted">{empty}</p>}
-    </section>
   )
 }
 

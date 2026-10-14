@@ -78,7 +78,7 @@ export function visibleSteps(context: TourContext): TourStep[] {
     id: "goals",
     title: "Goals",
     target: "goals",
-    body: "Odyle is a number you enter from the game. Goals and Advice sit under it.",
+    body: "Odyle is a number you enter from the game. Goals sit under it.",
   })
   return steps
 }

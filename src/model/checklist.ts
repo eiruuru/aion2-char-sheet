@@ -72,6 +72,7 @@ const TASK_INPUT: Array<Omit<TaskDef, "priority"> & { priority?: Priority }> = [
   { id: "field-bosses", name: "Field bosses", cadence: "daily", scope: "server", tag: "core", priority: "high", cap: 4, bank: null, refillMs: null, assign: "field-bosses", icon: EXPLORE_ICON, notes: "In order: Gartua, Lagta, Kashapa, Dartan. The lowest character under gear score 1,400 takes them." },
   { id: "shugo", name: "Shugo Festival", cadence: "daily", scope: "server", tag: "core", priority: "medium", cap: 3, bank: 12, memberBank: 21, refillMs: null, accrue: 3, stockBoxes: true, assign: "main", icon: SHOP_ICON, notes: "3 a day, shared. Holds 12, or 21 with membership." },
   { id: "dimension", name: "Dimensional Invasion", cadence: "daily", scope: "server", tag: "core", priority: "medium", cap: 1, bank: 7, refillMs: null, accrue: 1, stockBoxes: true, assign: "main", icon: DUNGEON_ICON, notes: "1 a day, holds 7. Shared by the server." },
+  { id: "abyss-day", name: "Abyss Farming", cadence: "daily", scope: "character", tag: "core", priority: "medium", cap: 1, bank: null, refillMs: null, assign: "main", icon: EXPLORE_ICON, notes: "At least an hour in the Abyss." },
   { id: "rift", name: "Spacetime Rift", cadence: "daily", scope: "character", tag: "core", priority: "low", cap: 1, bank: null, refillMs: 3 * 60 * 60 * 1000, assign: "everyone", icon: RIFT_ICON, notes: "Verteron, Eltnen, Altgard, or Morheim. About a 3 hour cycle." },
   { id: "fissure-day", name: "Daily Dungeon", cadence: "daily", scope: "server", tag: "core", priority: "low", cap: 2, bank: null, refillMs: null, assign: "main", icon: DUNGEON_ICON, notes: "Unknown Fissure. 14 entries for the server this week. Instant clear tickets are in Substance Morph during the server transfer." },
   { id: "qina", name: "Open world Qina", cadence: "daily", scope: "character", tag: "core", priority: "low", cap: 1, bank: null, refillMs: null, assign: "everyone", icon: EXPLORE_ICON, notes: "1 million Qina. Mark 1 when that character is capped." },
@@ -204,6 +205,7 @@ export type SessionItem = {
   shared: boolean
   count: number
   cap: number
+  priority: Priority
 }
 
 export function emptyProgress(now = Date.now()): ChecklistProgress {
@@ -367,7 +369,7 @@ function endgame(character: ChecklistCharacter): boolean {
   return (character.level ?? 0) >= 45
 }
 
-const ABYSS_IDS = new Set(["abyss"])
+const ABYSS_IDS = new Set(["abyss", "abyss-day"])
 
 function belowGear(character: ChecklistCharacter): boolean {
   return (character.itemLevel ?? 0) < GEAR_GATE
@@ -746,15 +748,107 @@ export function sessionItems(
       shared: false,
       count: 0,
       cap: 0,
+      priority: "critical",
     })
   }
   return [...lost, ...soon, ...today, ...week]
 }
 
-export function rosterMark(items: SessionItem[], characterId: string): { count: number; urgent: boolean } {
-  const mine = items.filter((item) => item.characterId === characterId)
+export type RosterGoal = {
+  id: string
+  taskName: string
+  meta: string
+  detail: string
+  due: string
+  characterId: string | null
+  urgent: boolean
+  priority: Priority
+}
+
+export function rosterGoals(items: SessionItem[], selectedId: string | null, odyle: OdyleGoal | null, now: number): RosterGoal[] {
+  const chosen = new Map<string, SessionItem>()
+  const order: string[] = []
+  for (const item of items) {
+    const key = item.characterId == null ? item.id : item.shared ? `shared:${item.taskName}` : item.id
+    const current = chosen.get(key)
+    if (!current) {
+      chosen.set(key, item)
+      order.push(key)
+      continue
+    }
+    if (selectedId && item.characterId === selectedId) chosen.set(key, item)
+  }
+  const lines = order.map((key) => rosterGoal(chosen.get(key)!, now))
+  const odyleLine = odyleGoalLine(selectedId, odyle, now)
+  const goals = odyleLine ? [...lines, odyleLine] : lines
+  return goals.sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority])
+}
+
+function rosterGoal(item: SessionItem, now: number): RosterGoal {
+  const boss = item.characterId == null
+  return {
+    id: boss ? item.id : item.shared ? `shared:${item.taskName}` : item.id,
+    taskName: item.taskName,
+    meta: goalMeta(item),
+    detail: boss ? "" : shortDetail(item.detail),
+    due: dueLabel(item, now),
+    characterId: item.characterId,
+    urgent: item.band === "lost",
+    priority: item.priority,
+  }
+}
+
+function goalMeta(item: SessionItem): string {
+  if (item.characterId == null) return ""
+  const count = item.cap > 0 ? `${item.count}/${item.cap}` : ""
+  return [item.characterName, count].filter(Boolean).join(" · ")
+}
+
+function dueLabel(item: SessionItem, now: number): string {
+  if (item.characterId == null) {
+    const boss = upcomingBosses(now).find((boss) => boss.id === item.id || boss.name === item.taskName)
+    return boss ? `Spawns in ${shortLeft(boss.at - now)}` : ""
+  }
+  if (item.band === "lost") return "Due now"
+  const at = item.band === "week" ? nextWeeklyReset(now) : nextDailyReset(now)
+  return `Due in ${shortLeft(at - now)}`
+}
+
+function shortDetail(text: string): string {
+  return text.trim().split(/(?<=\.)\s/)[0] ?? ""
+}
+
+function odyleGoalLine(selectedId: string | null, odyle: OdyleGoal | null, now: number): RosterGoal | null {
+  if (!selectedId || !odyle) return null
+  const soon = odyle.fullAt != null && odyle.fullAt - now <= TWO_DAYS_MS
+  if (!odyle.full && !odyle.aboveCap && !soon) return null
+  const due = odyle.aboveCap ? "Above the cap" : odyle.full ? "At the cap" : `Caps in ${shortLeft(odyle.fullAt! - now)}`
+  return {
+    id: "odyle",
+    taskName: "Odyle",
+    meta: "",
+    detail: odyle.full || odyle.aboveCap ? "Regen is paused." : "Spend it before regen stops.",
+    due,
+    characterId: selectedId,
+    urgent: odyle.full || odyle.aboveCap,
+    priority: "critical",
+  }
+}
+
+function shortLeft(ms: number): string {
+  return formatDuration(ms).replace(/ 0[hm]$/, "")
+}
+
+export function rosterMark(
+  items: SessionItem[],
+  characterId: string,
+  selectedId: string | null = null,
+  odyle: OdyleGoal | null = null,
+  now = Date.now(),
+): { count: number; urgent: boolean } {
+  const mine = rosterGoals(items, selectedId, odyle, now).filter((goal) => goal.characterId === characterId)
   const bossSoon = items.some((item) => item.characterId == null && item.band === "lost")
-  const urgent = mine.some((item) => item.band === "lost") || (bossSoon && mine.some((item) => item.taskName === "Field bosses"))
+  const urgent = mine.some((goal) => goal.urgent) || (bossSoon && mine.some((goal) => goal.taskName === "Field bosses"))
   return { count: mine.length, urgent }
 }
 
@@ -772,6 +866,7 @@ function sessionLine(character: ChecklistCharacter, row: ChecklistRow, band: Ses
     shared: row.shared,
     count: row.stockBoxes ? row.bank ?? 0 : row.count,
     cap: row.stockBoxes ? row.bankCap ?? row.cap : row.cap,
+    priority: row.priority,
   }
 }
 

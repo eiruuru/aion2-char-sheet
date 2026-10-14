@@ -15,6 +15,7 @@ function item(overrides: Partial<SessionItem> & Pick<SessionItem, "id" | "taskNa
     shared: false,
     count: 0,
     cap: 1,
+    priority: "medium",
     ...overrides,
   }
 }

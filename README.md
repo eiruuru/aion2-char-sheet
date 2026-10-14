@@ -4,7 +4,7 @@ A local sheet for an Aion 2 roster. Search a public profile, pin a main and the 
 
 The public character page supplies the portrait, class, faction, level, title, gear score, combat power, equipment, skills, Daevanion boards, and cosmetics. Gear names use the same grade colors as the game. A visible roster refreshes about every 20 minutes, one character at a time.
 
-You type the Odyle reading. The sheet then adds 15 every 3 hours and stops at the cap: 560, or 840 with Special Quai Membership. Opening a cube subtracts 40. Goals ranks what is due. Advice points at the next gear, skill, or Daevanion gap and keeps a combat-power history.
+You type the Odyle reading. The sheet then adds 15 every 3 hours and stops at the cap: 560, or 840 with Special Quai Membership. Opening a cube subtracts 40. Goals ranks what is due.
 
 Checklist marks, banks, and goals stay on this device. The sheet does not log into Aion 2, change a character, or mark a task in the game. It does not attach to the client, read game memory, or ask for a PlayNC password. Refresh only reads the public profile. Export is the backup.
 

@@ -5,6 +5,8 @@ import {
   listClock,
   rowsForCharacter,
   seasonNotice,
+  rosterGoals,
+  rosterMark,
   sessionItems,
   setTaskBank,
   setTaskCount,
@@ -122,6 +124,8 @@ describe("assignment", () => {
     expect(abyss[0].name).toBe("Abyss farming and missions")
     expect(abyss[0].cap).toBe(7)
     expect(abyss[0].cadence).toBe("weekly")
+    expect(member.find((row) => row.taskId === "abyss-day")).toMatchObject({ name: "Abyss Farming", cap: 1, cadence: "daily", priority: "medium" })
+    expect(rowsForCharacter(under, [under], emptyProgress(FAR_FROM_RESET), true, FAR_FROM_RESET).some((row) => row.taskId === "abyss-day")).toBe(false)
     const season = member.filter((row) => row.cadence === "season")
     expect(season.map((row) => row.taskId)).toContain("season-rift-kina")
     expect(season.find((row) => row.taskId === "season-rift-kina")?.cap).toBe(7)
@@ -181,6 +185,7 @@ describe("urgency", () => {
       "field-bosses",
       "shugo",
       "dimension",
+      "abyss-day",
       "rift",
       "fissure-day",
       "qina",
@@ -345,6 +350,39 @@ describe("today list", () => {
     expect(items.some((item) => item.taskName === "Field bosses" && item.characterId === "alt")).toBe(true)
     expect(items.some((item) => item.taskName === "Field bosses" && item.characterId === "main")).toBe(false)
     expect(items.some((item) => item.taskName.startsWith("Raid"))).toBe(false)
+  })
+
+  it("collapses a shared task to one count and keeps a full bank first", () => {
+    const main = character({ id: "main", name: "Nairen", role: "main", itemLevel: 1700 })
+    const alt = character({ id: "alt", name: "Lumen", role: "alt", itemLevel: 1200 })
+    const full = setTaskBank(emptyProgress(FAR_FROM_RESET), "nightmare", main, 14, false, FAR_FROM_RESET)
+    const lines = rosterGoals(sessionItems([main, alt], full, false, FAR_FROM_RESET), "alt", null, FAR_FROM_RESET)
+    expect(lines[0]).toMatchObject({ taskName: "Nightmare", meta: "Nairen · 14/14", due: "Due now", urgent: true })
+    const duty = lines.filter((line) => line.taskName === "Duty Missions")
+    expect(duty).toEqual([expect.objectContaining({
+      meta: "Lumen · 0/5",
+      detail: "5 payouts a day for the server.",
+      due: "Due in 23h",
+      characterId: "alt",
+    })])
+    const farming = lines.filter((line) => line.taskName === "Abyss Farming")
+    expect(farming).toEqual([expect.objectContaining({
+      meta: "Nairen · 0/1",
+      detail: "At least an hour in the Abyss.",
+      priority: "medium",
+      characterId: "main",
+    })])
+    expect(lines.findIndex((line) => line.taskName === "Field bosses")).toBeLessThan(lines.findIndex((line) => line.taskName === "Abyss Farming"))
+    expect(lines.findIndex((line) => line.taskName === "Abyss Farming")).toBeLessThan(lines.findIndex((line) => line.taskName === "Open world Qina"))
+    expect(rosterMark(sessionItems([main, alt], full, false, FAR_FROM_RESET), "main", "alt", null, FAR_FROM_RESET).count)
+      .toBe(lines.filter((line) => line.characterId === "main").length)
+    expect(rosterMark(sessionItems([main, alt], full, false, FAR_FROM_RESET), "alt", "alt", null, FAR_FROM_RESET).count)
+      .toBe(lines.filter((line) => line.characterId === "alt").length)
+    expect(lines.some((line) => line.meta.includes("payouts"))).toBe(false)
+    const soon = rosterGoals([], "alt", { full: false, aboveCap: false, fullAt: FAR_FROM_RESET + 6 * 60 * 60 * 1000 }, FAR_FROM_RESET)
+    expect(soon).toEqual([expect.objectContaining({ taskName: "Odyle", due: "Caps in 6h", detail: "Spend it before regen stops." })])
+    const later = rosterGoals([], "alt", { full: false, aboveCap: false, fullAt: FAR_FROM_RESET + 5 * 24 * 60 * 60 * 1000 }, FAR_FROM_RESET)
+    expect(later).toEqual([])
   })
 })
 

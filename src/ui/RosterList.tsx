@@ -19,6 +19,8 @@ export function RosterList({
   onSelect: (id: string) => void
 }) {
   const cap = odyleCap(membership)
+  const selected = characters.find((character) => character.id === selectedId)
+  const odyle = selected?.odyle ? projectOdyle(selected.odyle, cap, now) : null
   if (!characters.length) {
     return <p className="muted">Search a name to pin your main and alts.</p>
   }
@@ -26,7 +28,7 @@ export function RosterList({
     <ul className="roster">
       {characters.map((character) => {
         const projection = character.odyle ? projectOdyle(character.odyle, cap, now) : null
-        const mark = rosterMark(due, character.id)
+        const mark = rosterMark(due, character.id, selectedId, odyle, now)
         return (
           <li key={character.id}>
             <button

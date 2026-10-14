@@ -25,8 +25,8 @@ import {
   type StoreData,
 } from "./model/store"
 import { factionName } from "./api/serverList"
-import { characterSuggestions, rosterOrder } from "./model/suggestions"
-import { CUBE_COST, odyleCap, projectOdyle, shiftOdyleClock, spendOdyleReading } from "./model/odyle"
+import { rosterOrder } from "./model/suggestions"
+import { CUBE_COST, odyleCap, projectOdyle, shiftOdyleClock, spendOdyleReading, type OdyleProjection } from "./model/odyle"
 import { desktopBridge } from "./desktop"
 import { APP_VERSION, reduceUpdateStatus, UPDATE_SKIP_KEY, WINDOW_TITLE, type UpdateOffer } from "./model/updates"
 import { AddCharacter } from "./ui/AddCharacter"
@@ -335,7 +335,6 @@ export function App() {
 
   const cap = odyleCap(store.membership)
   const projection = selected?.odyle ? projectOdyle(selected.odyle, cap, now) : null
-  const suggestions = selected ? characterSuggestions(selected, shownCharacters, store.membership, now) : []
   const checklistRoster = shownCharacters.map((character) => toChecklistCharacter(character, store.membership, now))
   const progress = (previewing ? sampleProgress(now) : null) ?? store.checklist ?? normalizeStore(store, now).checklist!
   const selectedChecklist = selected
@@ -485,12 +484,12 @@ export function App() {
                     type="button"
                     className={["roster-pick", rosterTone(slot.character, shownCharacters), slot.character.id === selected?.id ? "selected" : ""].filter(Boolean).join(" ")}
                     title={`${slot.character.name} · ${slot.character.role === "main" ? "Main" : "Alt"}`}
-                    aria-label={rosterLabel(slot.character, due)}
+                    aria-label={rosterLabel(slot.character, due, selected?.id ?? null, projection, now)}
                     aria-pressed={slot.character.id === selected?.id}
                     onClick={() => setSelectedId(slot.character.id)}
                   >
                     {slot.character.latest?.portrait ? <img src={slot.character.latest.portrait} alt="" /> : <span className="initial">{slot.character.name.slice(0, 1)}</span>}
-                    <RosterCount items={due} characterId={slot.character.id} />
+                    <RosterCount items={due} characterId={slot.character.id} selectedId={selected?.id ?? null} odyle={projection} now={now} />
                   </button>
                 ) : (
                   <button
@@ -532,8 +531,6 @@ export function App() {
         </div>
         <GoalsPanel
           character={selected}
-          rows={checklistRows}
-          suggestions={suggestions}
           projection={projection}
           now={now}
           due={due}
@@ -586,14 +583,14 @@ function serverSlots(characters: CharacterRecord[]): RosterSlot[] {
   return slots
 }
 
-function rosterLabel(character: CharacterRecord, items: ReturnType<typeof sessionItems>): string {
+function rosterLabel(character: CharacterRecord, items: ReturnType<typeof sessionItems>, selectedId: string | null, odyle: OdyleProjection | null, now: number): string {
   const role = character.role === "main" ? "main" : "alt"
-  const mark = rosterMark(items, character.id)
+  const mark = rosterMark(items, character.id, selectedId, odyle, now)
   return mark.count ? `${character.name}, ${role}, ${mark.count} open` : `${character.name}, ${role}`
 }
 
-function RosterCount({ items, characterId }: { items: ReturnType<typeof sessionItems>; characterId: string }) {
-  const mark = rosterMark(items, characterId)
+function RosterCount({ items, characterId, selectedId, odyle, now }: { items: ReturnType<typeof sessionItems>; characterId: string; selectedId: string | null; odyle: OdyleProjection | null; now: number }) {
+  const mark = rosterMark(items, characterId, selectedId, odyle, now)
   if (!mark.count) return null
   return <span className={mark.urgent ? "roster-count urgent" : "roster-count"}>{mark.count}</span>
 }
