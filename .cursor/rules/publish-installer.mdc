@@ -1,0 +1,16 @@
+---
+description: When committing and pushing, publish a new Windows installer version
+alwaysApply: true
+---
+
+# Publish the installer with each commit
+
+When the user asks to commit and push, ship a new installer in the same change.
+
+1. Raise `version` in `package.json`. Run `npm version <version> --no-git-tag-version` so `package.json` and `package-lock.json` stay together. Use the next patch for a fix and the next minor for a feature. Do not reuse or move an existing tag such as `v0.4.0`.
+2. Replace `build.releaseInfo.releaseNotes` with a short note for this version. That text is the in-app update card and the GitHub release.
+3. Commit the version bump with the work.
+4. Push `main` to `origin` and to GitHub. GitHub HTTPS cannot prompt for a username; push with `git@github.com:eiruuru/aion2-char-sheet.git`.
+5. Tag that commit `v` plus the version, for example `v0.5.0`, and push the tag to GitHub. The Windows workflow builds the installer only when a `v*` tag arrives there.
+
+Skip the bump only when the user says this commit should not be released.

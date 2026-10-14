@@ -1,7 +1,7 @@
 {
   "name": "aion2-tracker",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Local Aion 2 character sheet. Public profiles supply gear, skills, and Daevanion. Dailies, goals, and the Odyle clock stay on this device.",
   "type": "module",
   "main": "electron/main.cjs",
@@ -56,7 +56,7 @@
     ],
     "afterPack": "electron/after-pack.cjs",
     "releaseInfo": {
-      "releaseNotes": "The checklist is sorted by priority, with a full row of boxes for each task. Class guide advice checks once a day. A newer version can be installed from inside the app."
+      "releaseNotes": "Seasonal tasks leave the checklist after their maintenance. Daily and weekly lists show the next reset and world boss. The roster names what is still open, and the last character opens again. Class Guides and General Guides list Global YouTube videos. The Windows app can notify you when a charge would be missed or a world boss is close."
     },
     "publish": {
       "provider": "github",
