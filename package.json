@@ -58,7 +58,8 @@
     "publish": {
       "provider": "github",
       "owner": "eiruuru",
-      "repo": "aion2-char-sheet"
+      "repo": "aion2-char-sheet",
+      "releaseType": "release"
     },
     "nsis": {
       "oneClick": true,
