@@ -110,7 +110,7 @@ export function CharacterPanel({
 
   return (
     <>
-    <article className="detail">
+    <article className="detail" data-tour="profile">
       <header className="detail-head profile-head">
         <div className="profile-row">
           <div className="portrait-wrap">
@@ -177,7 +177,7 @@ export function CharacterPanel({
 
       <div className="content-row">
         <section className="panel">
-          <div className="tabs" role="tablist" aria-label="Tasks">
+          <div className="tabs" role="tablist" aria-label="Tasks" data-tour="tasks">
             {PLAY_TABS.map((item) => (
               <button key={item.id} type="button" role="tab" aria-selected={playTab === item.id} onClick={() => setPlayTab(item.id)}>
                 {item.label}
@@ -198,7 +198,7 @@ export function CharacterPanel({
           </div>
         </section>
         <section className="panel">
-          <div className="tabs" role="tablist" aria-label="Character">
+          <div className="tabs" role="tablist" aria-label="Character" data-tour="build">
             {buildTabs.map((item) => (
               <button key={item.id} type="button" role="tab" aria-selected={activeBuild === item.id} onClick={() => setBuildTab(item.id)}>
                 {item.label}

@@ -29,7 +29,7 @@ export function GoalsPanel({
   const [tab, setTab] = useState<"goals" | "advice">("goals")
   const goals = characterGoals(rows, now, projection)
   return (
-    <aside className="side-column">
+    <aside className="side-column" data-tour="goals">
       {character ? (
         <OdyleCard
           character={character}

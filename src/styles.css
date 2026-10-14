@@ -68,6 +68,7 @@ body::-webkit-scrollbar,
 }
 .top { align-items: center; margin-bottom: 1rem; row-gap: 0.85rem; }
 .top .actions { justify-content: flex-end; flex-wrap: nowrap; }
+.tour-tools { display: flex; gap: 0.75rem; align-items: center; }
 .layout {
   display: grid;
   grid-template-columns: minmax(280px, 360px) 1fr;
@@ -1006,6 +1007,32 @@ button.tick:disabled { opacity: 0.4; cursor: default; }
   .profile-row .companions { margin-left: 0; width: 100%; }
   .profile-stat .stat-value { font-size: 2rem; }
 }
+
+.tour { position: fixed; inset: 0; z-index: 80; }
+.tour-blocker { position: fixed; inset: 0; }
+.tour-scrim { position: fixed; inset: 0; background: rgb(0 0 0 / 72%); }
+.tour-hole {
+  position: fixed;
+  border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 72%);
+  outline: 2px solid var(--accent);
+  pointer-events: none;
+}
+.tour-card {
+  position: fixed;
+  z-index: 1;
+  width: min(20rem, calc(100vw - 1.5rem));
+  margin: 0;
+  padding: 1rem 1.05rem 0.9rem;
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+.tour-card h2 { margin: 0.35rem 0 0; font-size: 1.15rem; }
+.tour-card p { color: var(--muted); line-height: 1.45; }
+.tour-actions { display: flex; justify-content: flex-end; gap: 0.45rem; margin-top: 0.95rem; }
+.tour-actions button { border-radius: 8px; padding: 0.45rem 0.8rem; }
 
 @media (max-width: 640px) {
   .app { padding: 0.85rem; }

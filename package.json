@@ -1,8 +1,8 @@
 {
   "name": "aion2-tracker",
   "private": true,
-  "version": "0.2.0",
-  "description": "Local Aion 2 roster tracker. It shows today's tasks, gear, skills, and Daevanion boards, and keeps Odyle and bank readings on their own clocks.",
+  "version": "0.3.0",
+  "description": "Local Aion 2 character sheet. Public profiles supply gear, skills, and Daevanion. Dailies, goals, and the Odyle clock stay on this device.",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {

@@ -28,6 +28,9 @@ import { AddCharacter } from "./ui/AddCharacter"
 import { CharacterPanel } from "./ui/CharacterPanel"
 import { GoalsPanel } from "./ui/Goals"
 import { ExportIcon, ImportIcon, MembershipIcon, PinIcon, TrashIcon } from "./ui/icons"
+import { Onboarding } from "./ui/Onboarding"
+import { SAMPLE_ID, charactersForTour, sampleProgress } from "./ui/sampleSheet"
+import { clearOnboardingSeen, readOnboardingSeen, writeOnboardingSeen } from "./ui/tour"
 
 const REFRESH_MS = 20 * 60 * 1000
 let profileRefresh: Promise<void> | null = null
@@ -41,6 +44,7 @@ export function App() {
   const [focusToken, setFocusToken] = useState(0)
   const [now, setNow] = useState(() => Date.now())
   const [aboveGame, setAboveGame] = useState(false)
+  const [tourOpen, setTourOpen] = useState(() => !readOnboardingSeen(localStorage))
   const desktop = desktopBridge()
   const storeRef = useRef(store)
   storeRef.current = store
@@ -75,13 +79,19 @@ export function App() {
     })
   }, [now])
 
+  const previewing = tourOpen && store.characters.length === 0
+  const shownCharacters = useMemo(
+    () => charactersForTour(store.characters, previewing),
+    [store.characters, previewing],
+  )
   const ordered = useMemo(
-    () => rosterOrder(store.characters, store.membership, now),
-    [store.characters, store.membership, now],
+    () => rosterOrder(shownCharacters, store.membership, now),
+    [shownCharacters, store.membership, now],
   )
   const selected = ordered.find((character) => character.id === selectedId) ?? ordered[0] ?? null
 
   async function loadProfile(record: CharacterRecord) {
+    if (record.id === SAMPLE_ID) return
     setBusyId(record.id)
     setError("")
     try {
@@ -183,7 +193,7 @@ export function App() {
   }
 
   function updateSelected(patch: (character: CharacterRecord) => CharacterRecord) {
-    if (!selected) return
+    if (!selected || selected.id === SAMPLE_ID) return
     setStore((current) => ({
       ...current,
       characters: current.characters.map((character) => (
@@ -219,7 +229,7 @@ export function App() {
   }
 
   function changeBoxes(taskId: string, owners: MarkOwner[]) {
-    if (!selected) return
+    if (!selected || selected.id === SAMPLE_ID) return
     const at = Date.now()
     setNow(at)
     setStore((current) => {
@@ -229,7 +239,7 @@ export function App() {
     })
   }
   function makeMain() {
-    if (!selected) return
+    if (!selected || selected.id === SAMPLE_ID) return
     setStore((current) => ({
       ...current,
       characters: current.characters.map((character) => {
@@ -241,7 +251,7 @@ export function App() {
   }
 
   function removeSelected() {
-    if (!selected) return
+    if (!selected || selected.id === SAMPLE_ID) return
     if (!window.confirm(`Remove ${selected.name} from this tracker?`)) return
     const remaining = store.characters.filter((character) => character.id !== selected.id)
     setStore((current) => ({
@@ -287,20 +297,20 @@ export function App() {
 
   const cap = odyleCap(store.membership)
   const projection = selected?.odyle ? projectOdyle(selected.odyle, cap, now) : null
-  const suggestions = selected ? characterSuggestions(selected, store.characters, store.membership, now) : []
-  const checklistRoster = store.characters.map((character) => toChecklistCharacter(character, store.membership, now))
-  const progress = store.checklist ?? normalizeStore(store, now).checklist!
+  const suggestions = selected ? characterSuggestions(selected, shownCharacters, store.membership, now) : []
+  const checklistRoster = shownCharacters.map((character) => toChecklistCharacter(character, store.membership, now))
+  const progress = (previewing ? sampleProgress(now) : null) ?? store.checklist ?? normalizeStore(store, now).checklist!
   const selectedChecklist = selected
     ? checklistRoster.find((character) => character.id === selected.id) ?? null
     : null
   const checklistRows = selectedChecklist
     ? rowsForCharacter(selectedChecklist, checklistRoster, progress, store.membership, now)
     : []
-  const names = Object.fromEntries(store.characters.map((character) => [character.id, character.name]))
-  const roles = Object.fromEntries(store.characters.map((character) => [character.id, character.role]))
+  const names = Object.fromEntries(shownCharacters.map((character) => [character.id, character.name]))
+  const roles = Object.fromEntries(shownCharacters.map((character) => [character.id, character.role]))
 
   function changeBank(taskId: string, value: number) {
-    if (!selected) return
+    if (!selected || selected.id === SAMPLE_ID) return
     const at = Date.now()
     setNow(at)
     setStore((current) => {
@@ -317,6 +327,7 @@ export function App() {
           <h1>AION 2 Character Sheet</h1>
         </div>
         <div className="actions">
+          <div className="tour-tools" data-tour="tools">
           <button
             type="button"
             className={store.membership ? "icon-button" : "icon-button ghost"}
@@ -358,10 +369,13 @@ export function App() {
               }}
             />
           </label>
+          </div>
           <button type="button" className="icon-button ghost" aria-label="Clear" title="Clear" onClick={() => {
             if (!window.confirm(desktop ? "Clear every saved character in this app?" : "Clear every saved character on this browser?")) return
+            clearOnboardingSeen(localStorage)
             setStore(emptyStore())
             setSelectedId(null)
+            setTourOpen(true)
           }}>
             <TrashIcon />
           </button>
@@ -370,14 +384,14 @@ export function App() {
       {error ? <p className="error banner">{error}</p> : null}
       <div className="workspace">
         <div className="character-column">
-          <section className="roster-bar panel">
+          <section className="roster-bar panel" data-tour="roster">
             {rosterGroups(ordered).map((group) => (
               <div className="who" key={group.key}>
                 {group.slots.map((slot, index) => slot.kind === "character" ? (
                   <button
                     key={slot.character.id}
                     type="button"
-                    className={["roster-pick", rosterTone(slot.character, store.characters), slot.character.id === selected?.id ? "selected" : ""].filter(Boolean).join(" ")}
+                    className={["roster-pick", rosterTone(slot.character, shownCharacters), slot.character.id === selected?.id ? "selected" : ""].filter(Boolean).join(" ")}
                     title={`${slot.character.name} · ${slot.character.role === "main" ? "Main" : "Alt"}`}
                     aria-label={`${slot.character.name}, ${slot.character.role === "main" ? "main" : "alt"}`}
                     aria-pressed={slot.character.id === selected?.id}
@@ -416,8 +430,9 @@ export function App() {
             />
           ) : (
             <section className="panel empty">
-              <h2>Track the main, then the alts</h2>
-              <p>Search the public character profile, pin who you play, and the page will rank Daevanion, gear, and skill gaps. Odyle still needs a number from the game so you can see who is about to cap.</p>
+              <h2>Your characters, on this device</h2>
+              <p>Search a public profile and pin your main, then the alts. This sheet shows gear, skills, Daevanion, and cosmetics, and keeps dailies, weeklies, seasonal tasks, and goals here. Type the Odyle number from the game so you can see who is about to cap.</p>
+              <p>It does not log into Aion 2, change a character, or mark tasks in the game. Refresh only reads the public profile. Checklist marks stay on this device, and export is the backup.</p>
             </section>
           )}
         </div>
@@ -432,6 +447,17 @@ export function App() {
           onSpendCube={spendCube}
         />
       </div>
+      {tourOpen ? (
+        <Onboarding
+          hasCharacter={Boolean(selected)}
+          preview={previewing}
+          desktop={Boolean(desktop)}
+          onDone={() => {
+            writeOnboardingSeen(localStorage)
+            setTourOpen(false)
+          }}
+        />
+      ) : null}
     </div>
   )
 }
