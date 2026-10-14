@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { CharacterRecord } from "../model/store"
 import { parseStoredNumber } from "../model/store"
 import { formatCountdown, formatNumber, formatWhen } from "../model/format"
 import { CUBE_COST, type OdyleProjection } from "../model/odyle"
-import { characterGoals, type ChecklistRow, type GoalLine } from "../model/checklist"
+import { characterGoals, type ChecklistRow, type GoalLine, type SessionItem } from "../model/checklist"
 import { PriorityMark } from "./Checklist"
 import { guideLines, loadClassGuide, type GuideSummary } from "../model/guides"
 import type { Suggestion } from "../model/suggestions"
 import { Sparkline } from "./Sparkline"
+import { RefreshIcon } from "./icons"
+import { loadVideos, type VideoHit } from "../model/videos"
 
 export function GoalsPanel({
   character,
@@ -15,6 +17,8 @@ export function GoalsPanel({
   suggestions,
   projection,
   now,
+  due,
+  onSelectCharacter,
   onSaveOdyle,
   onSetOdyleTimer,
   onSpendCube,
@@ -24,11 +28,13 @@ export function GoalsPanel({
   suggestions: Suggestion[]
   projection: OdyleProjection | null
   now: number
+  due: SessionItem[]
+  onSelectCharacter: (characterId: string) => void
   onSaveOdyle: (amount: number) => void
   onSetOdyleTimer: (remainingMs: number) => void
   onSpendCube: () => void
 }) {
-  const [tab, setTab] = useState<"goals" | "advice">("goals")
+  const [tab, setTab] = useState<"goals" | "advice" | "class" | "general">("goals")
   const goals = characterGoals(rows, now, projection)
   return (
     <aside className="side-column" data-tour="goals">
@@ -46,13 +52,38 @@ export function GoalsPanel({
         <div className="tabs" role="tablist" aria-label="Goals">
           <button type="button" role="tab" aria-selected={tab === "goals"} onClick={() => setTab("goals")}>Goals</button>
           <button type="button" role="tab" aria-selected={tab === "advice"} onClick={() => setTab("advice")}>Advice</button>
+          <button type="button" role="tab" aria-selected={tab === "class"} onClick={() => setTab("class")}>Class Guides</button>
+          <button type="button" role="tab" aria-selected={tab === "general"} onClick={() => setTab("general")}>General Guides</button>
         </div>
         <div className="goals-scroll">
           {tab === "advice" ? (
             <AdviceView character={character} suggestions={suggestions} active />
+          ) : tab === "class" || tab === "general" ? (
+            <VideosView kind={tab} character={character} active />
           ) : (
             <>
               {character ? null : <p className="muted">Add a character to track goals.</p>}
+              {due.length ? (
+                <section className="goal-group">
+                  <h3>Roster</h3>
+                  <ul className="quests">
+                    {due.map((item) => (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          className="roster-due"
+                          disabled={item.characterId == null}
+                          onClick={() => { if (item.characterId) onSelectCharacter(item.characterId) }}
+                        >
+                          <strong>{item.taskName}</strong>
+                          {item.characterName ? <span className="muted">{item.characterName}</span> : null}
+                          {item.detail ? <span className="muted">{item.detail}</span> : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
               <GoalGroup title="Today" lines={goals.today} empty="Nothing is due in the next two days." />
               <GoalGroup title="Later" lines={goals.later} empty="No other open goals." />
             </>
@@ -118,6 +149,62 @@ function AdviceView({ character, suggestions, active }: { character: CharacterRe
         </>
       ) : <p>Refresh this character to start a combat-power history.</p>}
     </>
+  )
+}
+
+function VideosView({ kind, character, active }: { kind: "class" | "general"; character: CharacterRecord | null; active: boolean }) {
+  const [videos, setVideos] = useState<VideoHit[]>([])
+  const [failed, setFailed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [tick, setTick] = useState(0)
+  const force = useRef(false)
+  const className = character?.className ?? ""
+  useEffect(() => {
+    if (!active) return
+    if (kind === "class" && !className) {
+      setVideos([])
+      setFailed(false)
+      return
+    }
+    const refresh = force.current
+    force.current = false
+    let cancel = false
+    setVideos([])
+    setFailed(false)
+    setBusy(true)
+    void loadVideos(kind, className, localStorage, Date.now(), refresh).then((result) => {
+      if (cancel) return
+      setVideos(result.videos)
+      setFailed(result.failed)
+      setBusy(false)
+    })
+    return () => { cancel = true }
+  }, [active, kind, className, tick])
+  return (
+    <div className="video-pane">
+      <div className="video-head">
+        <button type="button" className="icon-button ghost" aria-label="Check for new videos" title="Check for new videos" onClick={() => { force.current = true; setTick((current) => current + 1) }} disabled={busy}>
+          <RefreshIcon />
+        </button>
+      </div>
+      {kind === "class" && !className ? <p className="muted">Add a character to see class videos.</p> : null}
+      {failed ? <p className="muted">{videos.length ? "Couldn't check YouTube. The saved list is still here." : "Couldn't check YouTube."}</p> : null}
+      {videos.length ? (
+        <ul className="video-list">
+          {videos.map((video) => (
+            <li key={video.id}>
+              <a href={`https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`} target="_blank" rel="noreferrer">
+                <img src={video.thumbnail} alt="" />
+                <span>
+                  <strong>{video.title}</strong>
+                  {video.channel ? <span className="muted">{video.channel}</span> : null}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : failed || (kind === "class" && !className) || busy ? null : <p className="muted">No Global videos for this search.</p>}
+    </div>
   )
 }
 

@@ -72,6 +72,7 @@ export function CharacterPanel({
   roles,
   onChecklistBoxes,
   onChecklistBank,
+  now,
 }: {
   character: CharacterRecord
   busy: boolean
@@ -83,6 +84,7 @@ export function CharacterPanel({
   roles: Record<string, "main" | "alt">
   onChecklistBoxes: (taskId: string, owners: MarkOwner[]) => void
   onChecklistBank: (taskId: string, value: number) => void
+  now: number
 }) {
   const snapshot = character.latest
   const [playTab, setPlayTab] = useState<PlayTab>("dailies")
@@ -192,6 +194,7 @@ export function CharacterPanel({
               names={names}
               roles={roles}
               characterId={character.id}
+              now={now}
               onBoxes={onChecklistBoxes}
               onBank={onChecklistBank}
             />

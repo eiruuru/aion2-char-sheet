@@ -1,5 +1,6 @@
 import type { CharacterRecord } from "../model/store"
 import { formatNumber } from "../model/format"
+import { rosterMark, type SessionItem } from "../model/checklist"
 import { odyleCap, projectOdyle } from "../model/odyle"
 
 export function RosterList({
@@ -7,12 +8,14 @@ export function RosterList({
   selectedId,
   membership,
   now,
+  due = [],
   onSelect,
 }: {
   characters: CharacterRecord[]
   selectedId: string | null
   membership: boolean
   now: number
+  due?: SessionItem[]
   onSelect: (id: string) => void
 }) {
   const cap = odyleCap(membership)
@@ -23,6 +26,7 @@ export function RosterList({
     <ul className="roster">
       {characters.map((character) => {
         const projection = character.odyle ? projectOdyle(character.odyle, cap, now) : null
+        const mark = rosterMark(due, character.id)
         return (
           <li key={character.id}>
             <button
@@ -40,6 +44,8 @@ export function RosterList({
                   {projection?.full ? <span className="tag warn">{projection.aboveCap ? "Above cap" : "Capping"}</span> : null}
                 </span>
                 <span className="muted">
+                  {mark.count ? <span className={mark.urgent ? "tag warn" : "tag"}>{mark.count} open</span> : null}
+                  {" "}
                   {character.className || "Class pending"} · Lv {character.latest?.level ?? "—"} · {character.serverName}
                   {character.latest ? ` · CP ${formatNumber(character.latest.combatPower)}` : ""}
                   {projection ? ` · Odyle ${formatNumber(projection.current)}/${formatNumber(projection.cap)}` : ""}

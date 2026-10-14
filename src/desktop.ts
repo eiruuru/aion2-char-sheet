@@ -9,6 +9,7 @@ type TrackerBridge = {
   saveFile: (raw: string) => Promise<void>
   getAlwaysOnTop: () => Promise<boolean>
   setAlwaysOnTop: (on: boolean) => Promise<boolean>
+  notify: (payload: { title: string; body: string }) => Promise<boolean>
   getVersion: () => Promise<string>
   checkForUpdates: () => Promise<{ supported: boolean }>
   downloadUpdate: () => Promise<void>

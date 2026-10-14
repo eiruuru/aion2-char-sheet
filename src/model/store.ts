@@ -33,6 +33,7 @@ export type StoreData = {
   membership: boolean
   characters: CharacterRecord[]
   checklist?: ChecklistProgress
+  selectedId?: string
 }
 
 const STORAGE_KEY = "aion2-tracker-v1"
@@ -50,7 +51,13 @@ export function normalizeStore(store: StoreData, now = Date.now()): StoreData {
     membership: Boolean(store.membership),
     characters: store.characters,
     checklist: migrateSharedKeys(syncProgress(store.checklist ?? emptyProgress(now), now), store.characters),
+    selectedId: typeof store.selectedId === "string" && store.selectedId ? store.selectedId : undefined,
   }
+}
+
+export function chooseCharacter(savedId: string | null | undefined, ids: string[]): string | null {
+  if (savedId && ids.includes(savedId)) return savedId
+  return ids[0] ?? null
 }
 
 export function characterKey(region: RegionId, serverId: number, characterId: string): string {

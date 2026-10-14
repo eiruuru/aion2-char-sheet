@@ -1,8 +1,11 @@
 import { formatCountdown, formatDuration } from "./format"
-import { upcomingBosses, dailyKey, inWeeklyBurnWindow, nextDailyReset, nextWeeklyReset, weeklyKey } from "./schedule"
+import { upcomingBosses, dailyKey, inWeeklyBurnWindow, manilaReset, nextDailyReset, nextWeeklyReset, weeklyKey } from "./schedule"
+
+export const HALLOWEEN_END = manilaReset(2026, 10, 4)
+export const RIFT_STONE_END = manilaReset(2026, 9, 28)
 
 const NEAR_RESET_MS = 6 * 60 * 60 * 1000
-const BOSS_SOON_MS = 2 * 60 * 60 * 1000
+export const BOSS_SOON_MS = 2 * 60 * 60 * 1000
 const GEAR_GATE = 1400
 const ABYSS_GATE = 1000
 const TRANSCENDENCE_GATE = 1600
@@ -55,6 +58,8 @@ type TaskDef = {
   stockBoxes?: boolean
   /** Season tasks clear with the weekly reset unless this is "event". */
   resets?: "weekly" | "event"
+  /** Hidden at this Manila maintenance. Saved marks stay in the file. */
+  endsAt?: number
   assign: Assign
   icon?: string
 }
@@ -108,7 +113,29 @@ const TASK_INPUT: Array<Omit<TaskDef, "priority"> & { priority?: Priority }> = [
   { id: "season-rift-kina", name: "Conquerors rift stone", cadence: "season", scope: "character", tag: "core", cap: 7, bank: null, refillMs: null, assign: "everyone", icon: SHOP_ICON, notes: "7 Abyss Rift Stones per character per week, 50,000 Kina each. Through the Oct 28 maintenance." },
 ]
 
-export const TASKS: TaskDef[] = TASK_INPUT.map((task) => ({ priority: "medium", ...task }))
+export const TASKS: TaskDef[] = TASK_INPUT.map((task) => ({
+  priority: "medium",
+  ...task,
+  endsAt: task.cadence === "season" ? (task.id === "season-rift-kina" ? RIFT_STONE_END : HALLOWEEN_END) : undefined,
+}))
+
+export function seasonNotice(now: number): string {
+  const lines: string[] = []
+  if (now < HALLOWEEN_END) lines.push("Halloween runs through the Nov 4 maintenance.")
+  if (now < RIFT_STONE_END) lines.push("Conquerors of the Abyss rift stones run through the Oct 28 maintenance.")
+  lines.push("Weekly limits clear Wednesday 3:00 PM.")
+  return lines.join(" ")
+}
+
+export function listClock(cadence: "daily" | "weekly", now: number): string {
+  const resetAt = cadence === "daily" ? nextDailyReset(now) : nextWeeklyReset(now)
+  const reset = cadence === "daily"
+    ? `Resets in ${formatCountdown(resetAt - now)}`
+    : `Wednesday reset in ${formatCountdown(resetAt - now)}`
+  const boss = upcomingBosses(now)[0]
+  if (!boss) return `${reset}.`
+  return `${reset}. Next: ${boss.name} in ${formatCountdown(boss.at - now)}.`
+}
 
 export type ChecklistCharacter = {
   id: string
@@ -431,6 +458,7 @@ export function rowsForCharacter(
 ): ChecklistRow[] {
   const current = syncProgress(progress, now)
   return TASKS.flatMap((task): ChecklistRow[] => {
+    if (task.endsAt != null && now >= task.endsAt) return []
     const mode = placement(task, character, roster, membership)
     if (mode === "hidden") return []
     if (task.note) {
@@ -723,6 +751,13 @@ export function sessionItems(
   return [...lost, ...soon, ...today, ...week]
 }
 
+export function rosterMark(items: SessionItem[], characterId: string): { count: number; urgent: boolean } {
+  const mine = items.filter((item) => item.characterId === characterId)
+  const bossSoon = items.some((item) => item.characterId == null && item.band === "lost")
+  const urgent = mine.some((item) => item.band === "lost") || (bossSoon && mine.some((item) => item.taskName === "Field bosses"))
+  return { count: mine.length, urgent }
+}
+
 function sessionLine(character: ChecklistCharacter, row: ChecklistRow, band: SessionItem["band"]): SessionItem {
   return {
     id: `${character.id}:${row.taskId}`,
@@ -731,7 +766,7 @@ function sessionLine(character: ChecklistCharacter, row: ChecklistRow, band: Ses
     characterName: character.name,
     portrait: character.portrait,
     title: `${character.name}: ${row.name}`,
-    detail: row.reason,
+    detail: row.reason || row.notes,
     characterId: character.id,
     icon: row.icon,
     shared: row.shared,

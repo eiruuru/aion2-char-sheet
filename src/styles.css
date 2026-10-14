@@ -131,6 +131,23 @@ button.quiet { background: transparent; color: var(--text); border: 1px solid va
   min-height: 0;
 }
 .goals > .tabs { flex: none; margin-bottom: 0; }
+.video-pane { display: grid; gap: 1.15rem; padding: 0.45rem 0.2rem 0.65rem; min-width: 0; }
+.video-head { display: flex; align-items: center; justify-content: flex-end; min-height: 2rem; }
+.video-head .icon-button { flex: none; }
+.video-pane > .muted { margin: 0; }
+.video-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 1.25rem; min-width: 0; }
+.video-list a {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+  color: inherit;
+  text-decoration: none;
+  padding: 0.15rem 0;
+}
+.video-list img { width: 112px; height: 63px; object-fit: cover; border-radius: 8px; background: #111; }
+.video-list strong { display: block; font-size: 0.9rem; line-height: 1.35; overflow-wrap: anywhere; }
+.video-list .muted { display: block; margin-top: 0.4rem; line-height: 1.4; }
 .goals-scroll {
   overflow: auto;
   min-width: 0;
@@ -214,7 +231,25 @@ button.group-toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
   border-radius: 999px;
 }
 .icon-button svg { width: 16px; height: 16px; display: block; }
+.clock-line { margin: 0 0 0.75rem; }
 .quests { list-style: none; padding: 0; margin: 0.35rem 0 0; display: grid; gap: 0.95rem; min-width: 0; }
+button.roster-due {
+  display: grid;
+  gap: 0.12rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  border-radius: 0;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+button.roster-due:disabled { cursor: default; }
+button.roster-due strong { display: block; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+button.roster-due .muted { display: block; line-height: 1.45; overflow-wrap: anywhere; }
 .quest { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.55rem; align-items: start; min-width: 0; }
 .quest-marks { display: flex; align-items: center; gap: 0.4rem; padding-top: 0.08rem; }
 .quest-marks .content-icon { flex: none; }
@@ -789,6 +824,23 @@ button.session-open { cursor: pointer; }
   border: 1px solid var(--line);
   font-size: 0.85rem;
 }
+.who > button.roster-pick { position: relative; }
+.roster-count {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  min-width: 1.05rem;
+  padding: 0.12rem 0.28rem;
+  border-radius: 999px;
+  background: #0a0a0a;
+  color: var(--text);
+  border: 1px solid var(--line);
+  font-size: 0.68rem;
+  line-height: 1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.roster-count.urgent { background: var(--warn); color: #3a2014; border-color: transparent; }
 .who > button.roster-pick,
 .who > button.roster-slot {
   padding: 0;

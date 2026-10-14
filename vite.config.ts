@@ -30,6 +30,18 @@ const proxy = {
       })
     },
   } satisfies ProxyOptions,
+  "/youtube": {
+    target: "https://www.youtube.com",
+    changeOrigin: true,
+    rewrite: (path) => path.replace(/^\/youtube/, ""),
+    configure: (youtubeProxy) => {
+      youtubeProxy.on("proxyReq", (proxyReq) => {
+        proxyReq.setHeader("Accept", "text/html")
+        proxyReq.setHeader("Accept-Language", "en-US,en")
+        proxyReq.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+      })
+    },
+  } satisfies ProxyOptions,
 }
 
 export default defineConfig({

@@ -26,6 +26,10 @@ function manilaStamp(year: number, month: number, day: number, hour: number, min
   return Date.UTC(year, month, day, hour - 8, minute, 0, 0)
 }
 
+export function manilaReset(year: number, month: number, day: number): number {
+  return manilaStamp(year, month, day, 15)
+}
+
 export function dailyPeriodStart(now: number): number {
   const parts = manilaParts(now)
   let { year, month, day } = parts

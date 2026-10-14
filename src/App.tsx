@@ -4,16 +4,20 @@ import type { RegionId, SearchHit } from "./api/types"
 import { buildSnapshot } from "./model/snapshot"
 import {
   applyBoxChange,
+  rosterMark,
   rowsForCharacter,
+  sessionItems,
   setTaskBank,
   type ChecklistCharacter,
   type MarkOwner,
 } from "./model/checklist"
-import { backupFileName } from "./model/schedule"
+import { dueNotices, pendingNotices, rememberNotices } from "./model/notices"
+import { backupFileName, upcomingBosses } from "./model/schedule"
 import {
   characterKey,
   emptyStore,
   loadStore,
+  chooseCharacter,
   normalizeStore,
   saveStore,
   withSnapshot,
@@ -38,7 +42,14 @@ let profileRefresh: Promise<void> | null = null
 
 export function App() {
   const [store, setStore] = useState<StoreData>(() => loadStore())
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem("aion2-tracker-v1") ?? "") as { selectedId?: unknown }
+      return typeof parsed.selectedId === "string" ? parsed.selectedId : null
+    } catch {
+      return null
+    }
+  })
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [adding, setAdding] = useState(false)
@@ -110,7 +121,12 @@ export function App() {
     () => rosterOrder(shownCharacters, store.membership, now),
     [shownCharacters, store.membership, now],
   )
-  const selected = ordered.find((character) => character.id === selectedId) ?? ordered[0] ?? null
+  const selected = ordered.find((character) => character.id === chooseCharacter(selectedId, ordered.map((character) => character.id))) ?? null
+
+  useEffect(() => {
+    if (previewing || !selected || selected.id === SAMPLE_ID) return
+    setStore((current) => current.selectedId === selected.id ? current : { ...current, selectedId: selected.id })
+  }, [previewing, selected])
 
   async function loadProfile(record: CharacterRecord) {
     if (record.id === SAMPLE_ID) return
@@ -308,7 +324,7 @@ export function App() {
           return
         }
         setStore(normalizeStore(parsed))
-        setSelectedId(parsed.characters[0]?.id ?? null)
+        setSelectedId(parsed.selectedId ?? parsed.characters[0]?.id ?? null)
         setError("")
       } catch {
         setError("Could not read that file.")
@@ -328,6 +344,25 @@ export function App() {
   const checklistRows = selectedChecklist
     ? rowsForCharacter(selectedChecklist, checklistRoster, progress, store.membership, now)
     : []
+  const due = sessionItems(checklistRoster, progress, store.membership, now)
+  const noticeKey = dueNotices(due, upcomingBosses(now), now).map((notice) => notice.key).join("\n")
+
+  useEffect(() => {
+    if (!desktop?.notify || previewing) return
+    const notices = pendingNotices(dueNotices(due, upcomingBosses(now), now), localStorage)
+    if (!notices.length) return
+    let cancel = false
+    void (async () => {
+      const shown = []
+      for (const notice of notices) {
+        const ok = await desktop.notify({ title: notice.title, body: notice.body })
+        if (cancel) return
+        if (ok) shown.push(notice)
+      }
+      if (shown.length) rememberNotices(shown, localStorage)
+    })()
+    return () => { cancel = true }
+  }, [desktop, noticeKey, previewing])
   const names = Object.fromEntries(shownCharacters.map((character) => [character.id, character.name]))
   const roles = Object.fromEntries(shownCharacters.map((character) => [character.id, character.role]))
 
@@ -450,11 +485,12 @@ export function App() {
                     type="button"
                     className={["roster-pick", rosterTone(slot.character, shownCharacters), slot.character.id === selected?.id ? "selected" : ""].filter(Boolean).join(" ")}
                     title={`${slot.character.name} · ${slot.character.role === "main" ? "Main" : "Alt"}`}
-                    aria-label={`${slot.character.name}, ${slot.character.role === "main" ? "main" : "alt"}`}
+                    aria-label={rosterLabel(slot.character, due)}
                     aria-pressed={slot.character.id === selected?.id}
                     onClick={() => setSelectedId(slot.character.id)}
                   >
                     {slot.character.latest?.portrait ? <img src={slot.character.latest.portrait} alt="" /> : <span className="initial">{slot.character.name.slice(0, 1)}</span>}
+                    <RosterCount items={due} characterId={slot.character.id} />
                   </button>
                 ) : (
                   <button
@@ -484,6 +520,7 @@ export function App() {
               roles={roles}
               onChecklistBoxes={changeBoxes}
               onChecklistBank={changeBank}
+              now={now}
             />
           ) : (
             <section className="panel empty">
@@ -499,6 +536,8 @@ export function App() {
           suggestions={suggestions}
           projection={projection}
           now={now}
+          due={due}
+          onSelectCharacter={setSelectedId}
           onSaveOdyle={saveOdyle}
           onSetOdyleTimer={setOdyleTimer}
           onSpendCube={spendCube}
@@ -545,6 +584,18 @@ function serverSlots(characters: CharacterRecord[]): RosterSlot[] {
   while (slots.length < FREE_SLOTS) slots.push({ kind: "free" })
   while (slots.length < SERVER_SLOTS) slots.push({ kind: "premium" })
   return slots
+}
+
+function rosterLabel(character: CharacterRecord, items: ReturnType<typeof sessionItems>): string {
+  const role = character.role === "main" ? "main" : "alt"
+  const mark = rosterMark(items, character.id)
+  return mark.count ? `${character.name}, ${role}, ${mark.count} open` : `${character.name}, ${role}`
+}
+
+function RosterCount({ items, characterId }: { items: ReturnType<typeof sessionItems>; characterId: string }) {
+  const mark = rosterMark(items, characterId)
+  if (!mark.count) return null
+  return <span className={mark.urgent ? "roster-count urgent" : "roster-count"}>{mark.count}</span>
 }
 
 function rosterTone(character: CharacterRecord, characters: CharacterRecord[]): string {

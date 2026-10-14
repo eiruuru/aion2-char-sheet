@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest"
 import {
   characterGoals,
   emptyProgress,
+  listClock,
   rowsForCharacter,
+  seasonNotice,
   sessionItems,
   setTaskBank,
   setTaskCount,
@@ -125,6 +127,25 @@ describe("assignment", () => {
     expect(season.find((row) => row.taskId === "season-rift-kina")?.cap).toBe(7)
     expect(season.find((row) => row.taskId === "season-shop-chest")?.cap).toBe(1)
     expect(member.filter((row) => row.cadence === "weekly").some((row) => row.taskId.startsWith("season-"))).toBe(false)
+  })
+
+  it("hides a seasonal task after its maintenance and keeps the saved mark", () => {
+    const main = character({ id: "main", name: "Nairen", role: "main", itemLevel: 1700 })
+    const before = Date.parse("2026-10-28T06:59:00.000Z")
+    const riftEnd = Date.parse("2026-10-28T07:00:00.000Z")
+    const halloweenEnd = Date.parse("2026-11-04T07:00:00.000Z")
+    const progress = setTaskCount(emptyProgress(before), "season-rift-kina", main, 3, false, before)
+    expect(rowsForCharacter(main, [main], progress, false, before).some((row) => row.taskId === "season-rift-kina")).toBe(true)
+    const afterRift = rowsForCharacter(main, [main], progress, false, riftEnd)
+    expect(afterRift.some((row) => row.taskId === "season-rift-kina")).toBe(false)
+    expect(afterRift.some((row) => row.taskId === "season-abyss-hunt")).toBe(true)
+    expect(progress.counts[`season-rift-kina|${main.id}`]).toBe(3)
+    expect(rowsForCharacter(main, [main], progress, false, halloweenEnd).some((row) => row.cadence === "season")).toBe(false)
+    expect(seasonNotice(before)).toContain("Oct 28")
+    expect(seasonNotice(riftEnd)).not.toContain("Oct 28")
+    expect(seasonNotice(halloweenEnd)).toBe("Weekly limits clear Wednesday 3:00 PM.")
+    expect(listClock("daily", FAR_FROM_RESET)).toMatch(/^Resets in .+ Next: /)
+    expect(listClock("weekly", FAR_FROM_RESET)).toMatch(/^Wednesday reset in /)
   })
 })
 

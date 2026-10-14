@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require("electron")
+const { app, BrowserWindow, ipcMain, Notification } = require("electron")
 
 if (app.isPackaged) app.setName("Aion 2 Progress")
 const fs = require("fs")
@@ -90,6 +90,14 @@ function startServer(root) {
       proxy(req, res, "https://aion2vault.com", "/guide-vault", {
         accept: "text/html,application/xhtml+xml",
         "user-agent": "Mozilla/5.0 (compatible; Aion2Progress/0.3)",
+      })
+      return
+    }
+    if (incoming.pathname.startsWith("/youtube")) {
+      proxy(req, res, "https://www.youtube.com", "/youtube", {
+        accept: "text/html",
+        "accept-language": "en-US,en",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       })
       return
     }
@@ -217,6 +225,14 @@ app.whenReady().then(async () => {
     const autoUpdater = ensureUpdater()
     if (!autoUpdater) return
     await autoUpdater.downloadUpdate().catch(() => {})
+  })
+  ipcMain.handle("tracker:notify", (_event, payload) => {
+    if (!app.isPackaged || windowRef?.isFocused() || !Notification.isSupported()) return false
+    const title = typeof payload?.title === "string" ? payload.title : ""
+    const body = typeof payload?.body === "string" ? payload.body : ""
+    if (!title) return false
+    new Notification({ title, body }).show()
+    return true
   })
   ipcMain.handle("updates:install", () => {
     const autoUpdater = ensureUpdater()

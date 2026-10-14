@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { PRIORITY_RANK, type ChecklistRow, type MarkOwner, type Priority } from "../model/checklist"
+import { listClock, PRIORITY_RANK, seasonNotice, type ChecklistRow, type MarkOwner, type Priority } from "../model/checklist"
 
 export function Checklist({
   cadence,
@@ -8,6 +8,7 @@ export function Checklist({
   names,
   roles,
   characterId,
+  now,
   onBoxes,
   onBank,
 }: {
@@ -17,19 +18,25 @@ export function Checklist({
   names: Record<string, string>
   roles: Record<string, "main" | "alt">
   characterId: string
+  now: number
   onBoxes: (taskId: string, owners: MarkOwner[]) => void
   onBank: (taskId: string, value: number) => void
 }) {
   const group = rows.filter((row) => row.cadence === cadence)
   if (level == null) return <p>Refresh this character to place them on the daily and weekly list.</p>
   if (level < 45) return <p>Under level 45, this character only levels. Server pools and the endgame checklist stay off until 45.</p>
-  if (!group.length) return <p className="muted">Nothing on this list.</p>
   return (
     <>
       {cadence === "season" ? (
-        <p className="muted">Halloween runs through the Nov 4 maintenance. Conquerors of the Abyss rift stones run through the Oct 28 maintenance. Weekly limits clear Wednesday 3:00 PM.</p>
-      ) : null}
-      <TaskGroup title="" rows={group} names={names} roles={roles} characterId={characterId} onBoxes={onBoxes} onBank={onBank} />
+        <p className="muted">{seasonNotice(now)}</p>
+      ) : (
+        <p className="muted clock-line">{listClock(cadence, now)}</p>
+      )}
+      {group.length ? (
+        <TaskGroup title="" rows={group} names={names} roles={roles} characterId={characterId} onBoxes={onBoxes} onBank={onBank} />
+      ) : (
+        <p className="muted">Nothing on this list.</p>
+      )}
     </>
   )
 }
