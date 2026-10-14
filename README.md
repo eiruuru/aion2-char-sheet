@@ -1,31 +1,47 @@
-# Aion 2 progress
+# Aion 2 Character Sheet
 
-A local tracker for an Aion 2 roster. It shows what is worth doing today, then keeps a checklist, gear, skills, Daevanion boards, and cosmetics for each character.
+A local sheet for an Aion 2 roster. Search a public profile, pin a main and the alts, and keep the day's work on this device.
 
-Character names, item level, combat power, equipment, skills, Daevanion nodes, and cosmetics come from the public character pages. The app refreshes a visible roster about every 20 minutes, one character at a time.
+The public character page supplies the portrait, class, faction, level, title, gear score, combat power, equipment, skills, Daevanion boards, and cosmetics. Gear names use the same grade colors as the game. A visible roster refreshes about every 20 minutes, one character at a time.
 
-Odyle, Qina, and the other wallet numbers are typed in. After you set a reading, the app counts forward on that clock:
+You type the Odyle reading. The sheet then adds 15 every 3 hours and stops at the cap: 560, or 840 with Special Quai Membership. Opening a cube subtracts 40. Goals ranks what is due. Advice points at the next gear, skill, or Daevanion gap and keeps a combat-power history.
 
-- Odyle refills on its 3 hour timer, and pauses at the cap.
-- Nightmare, Shugo, and Dimension keys gain at the 15:00 Asia/Manila reset, up to their caps.
-- Conquest charges gain every 8 hours, and Transcendence points every 12 hours.
-- Daily tasks reset at 15:00 Asia/Manila. Weekly tasks reset Wednesday at 15:00.
+Checklist marks, banks, and goals stay on this device. The sheet does not log into Aion 2, change a character, or mark a task in the game. It does not attach to the client, read game memory, or ask for a PlayNC password. Refresh only reads the public profile. Export is the backup.
 
-The window can stay above the game. It does not attach to the Aion 2 client, read game memory, or ask for a PlayNC password.
+The first launch walks through the roster, tools, profile, tasks, and goals. With an empty roster that tour uses an example character, and the example is not saved. Clearing the roster starts the tour again.
 
-## Windows download
+## Roster
 
-Unzip [download/Aion2-Progress-windows.zip](download/Aion2-Progress-windows.zip) and run `Aion2Progress.exe`. The folder also contains the runtime files the exe needs. Keep those files together.
+Six slots on a server: four free, and two gold slots for characters bought with premium currency. An empty slot opens search. An exact name is ranked ahead of a fuzzy match, and each hit shows its class icon.
 
-The save is `aion2-tracker.json` in the same folder as the exe. Export and import are still in the window if you want a dated backup.
+The profile row puts the portrait first, then the name and title, then Gear Score and Combat Power, then the mount and wings. Class, faction, and level sit on the bottom of the card.
 
-“Keep this window above the game” is stored in `aion2-window.json` beside the exe.
+## What you track
 
-## What the checklist covers
+Dailies, weeklies, and a seasonal tab. A task shared by the server is one row for that server. Each character keeps a color, so a tick on one shows on the others.
 
-Today groups the open tasks, with a portrait for each character who still needs that task. Under item level 1400, raid and Transcendence rows stay hidden. Field bosses sit with the lowest character who is still under 1400. Transcendence is on the main once item level reaches 1600.
+Clocks use Asia/Manila. The daily reset is 15:00. The weekly reset is Wednesday at 15:00.
 
-Shared runs keep a color for each character, so a tick on one character shows on the others. Nightmare, Shugo, and Dimension show one box for each entry still in the bank. Daily Dungeon shows the week’s 14 entries.
+- Nightmare adds 2 a day and holds 14. It is spent only on a clear.
+- Dimension keys add 1 a day and hold 7. Shugo Festival keys add 3 a day and hold 12, or 21 with membership.
+- Transcendence adds one charge every 12 hours and holds 14. It is on the main from item level 1,600.
+- Spacetime Rift follows about a 3 hour cycle.
+- The Abyss is 7 hours a week on the main once item level reaches 1,400. Membership does not add hours.
+- Wind Breeze Odyle is 20 per character for members during the server transfer.
+- Daily Dungeon is 14 entries for the server this week and does not carry past Wednesday.
+- Open world Qina is marked when that character has reached 1 million.
+
+Under item level 1,400, raid rows stay hidden and field bosses sit with the lowest character who is still gearing. Krao Cave and Urugugu Canyon are for those gearing characters. Ascension Trial, Abyss Corridor, and subjugation tickets are weekly and do not bank past Wednesday.
+
+Seasonal rows follow the current events. Halloween tasks and the pumpkin shop run through the November 4 maintenance. The Halloween chest is once per server for the whole event and does not reset on Wednesday. Conquerors rift stones are 7 per character per week, at 50,000 Kina each, through the October 28 maintenance. A later update can remove a finished seasonal task. That only hides the row. The rest of the save stays.
+
+## Windows
+
+Install Aion 2 Progress from the [latest release](https://github.com/eiruuru/aion2-char-sheet/releases). Opening the app later checks GitHub and installs a newer version.
+
+The roster and the "keep this window above the game" setting are saved in `%APPDATA%\Aion 2 Progress`. An update replaces the program and leaves that folder alone. If an older copy left `aion2-tracker.json` or `aion2-window.json` beside the exe, the first launch copies them into that folder.
+
+Export writes a dated backup. Import replaces the roster on this device.
 
 ## Develop
 
@@ -35,6 +51,6 @@ npm test
 npm run dev
 ```
 
-The browser app is at http://localhost:5173. Browser saves stay in local storage under `aion2-tracker-v1`.
+The browser app is at http://localhost:5173. Browser saves stay in local storage under `aion2-tracker-v1`. The finished-tour flag is a separate key, `aion2-onboarding-v1`, so clearing it is not the same as clearing characters.
 
-`npm run dist:windows` rebuilds the Windows zip. That command is meant to be run from this project, and it writes `release/` plus a copy at `download/Aion2-Progress-windows.zip`.
+`npm run dist:windows` builds the Windows installer into `release/`. Publishing a `v*` tag on GitHub runs the Windows release workflow.
