@@ -22,6 +22,7 @@ function createLiveSession({ execPath, helperPath, adapterFile, send }) {
   let phase = "off"
   let detail = ""
   let closing = false
+  let roster = []
 
   function sendEvent(event) {
     if (event?.type === "status") {
@@ -87,6 +88,7 @@ function createLiveSession({ execPath, helperPath, adapterFile, send }) {
       sendEvent({ type: "status", phase: "unavailable", detail: "Could not start Live Sync.", boundName: "" })
     })
     next.stdin.write(`${JSON.stringify({ cmd: "start", device: adapterFile ? readDevice(adapterFile) : "" })}\n`)
+    next.stdin.write(`${JSON.stringify({ cmd: "roster", names: roster })}\n`)
   }
 
   return {
@@ -111,10 +113,10 @@ function createLiveSession({ execPath, helperPath, adapterFile, send }) {
       startChild()
       return this.snapshot()
     },
-    mark(kind) {
-      if (!child) return false
-      child.stdin.write(`${JSON.stringify({ cmd: "mark", kind: kind === "odyle" ? "odyle" : "pet" })}\n`)
-      return true
+    setRoster(names) {
+      roster = Array.isArray(names) ? names.filter((name) => typeof name === "string" && name.trim()) : []
+      if (!child) return
+      child.stdin.write(`${JSON.stringify({ cmd: "roster", names: roster })}\n`)
     },
     findAdapter() {
       if (!npcapPresent()) {

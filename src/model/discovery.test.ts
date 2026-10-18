@@ -10,6 +10,10 @@ const decode = require("../../electron/capture/decode.cjs") as {
   decodePacket: (buf: Buffer, layout: { odyle?: { offset: number; width: number }; petSouls?: { offset: number; width: number } }) => { odyle?: number; souls?: number }
   createRing: () => { push: (buf: Buffer, at: number) => void; pair: () => { before: { bytes: Buffer }; after: { bytes: Buffer } } | null }
   pickAdapter: (rows: { name?: string; description?: string; udp?: number }[]) => { name: string; udp: number } | null
+  extractNames: (buf: Buffer) => string[]
+  matchRosterName: (names: string[], roster: string[]) => string | null
+  findOdyleTotal: (buf: Buffer) => number | null
+  realAdapters: (devices: { name?: string; description?: string }[]) => { name: string }[]
 }
 
 function packet(odyle: number, souls: number): Buffer {
@@ -61,5 +65,26 @@ describe("packet discovery", () => {
       { name: "loopback", udp: 0 },
     ])).toEqual({ name: "ethernet", description: "Realtek", udp: 40 })
     expect(decode.pickAdapter([{ name: "idle", udp: 0 }])).toBeNull()
+  })
+
+  it("reads a name and the Odyle total beside a cap, and skips virtual adapters", () => {
+    const named = Buffer.alloc(32)
+    named.write("Aria", 0, "utf8")
+    const wide = Buffer.alloc(16)
+    wide.write("Aria", 0, "utf16le")
+    expect(decode.extractNames(named)).toContain("Aria")
+    expect(decode.extractNames(wide)).toContain("Aria")
+    expect(decode.matchRosterName(["Sparkie", "Aria"], ["Nyx", "Aria"])).toBe("Aria")
+    expect(decode.matchRosterName(["Sparkie"], ["Aria"])).toBeNull()
+    const odyle = Buffer.alloc(12)
+    odyle.writeUInt32LE(640, 0)
+    odyle.writeUInt32LE(840, 4)
+    expect(decode.findOdyleTotal(odyle)).toBe(640)
+    expect(decode.realAdapters([
+      { name: "eth", description: "Realtek Gaming" },
+      { name: "lo", description: "Npcap Loopback" },
+      { name: "bt", description: "Bluetooth Device" },
+      { name: "vpn", description: "Hyper-V Virtual Ethernet" },
+    ]).map((device) => device.name)).toEqual(["eth"])
   })
 })

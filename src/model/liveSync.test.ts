@@ -71,6 +71,22 @@ describe("live sync events", () => {
     expect(stale.characters[0]?.petProgress?.souls).toBe(13)
   })
 
+  it("adds every recent kill to the open pet on the matched character", () => {
+    const base = store(character({ trackingPetId: "sparkie", petTracks: { sparkie: { level: 1, kills: 2 } } }))
+    const next = applyLiveEvent(base, "as:1501:aria", {
+      type: "kills",
+      names: ["Krall Armed Soldier", "Krall Sentinel"],
+      at: "2026-10-18T12:06:00.000Z",
+    })
+    expect(next.characters[0]?.petTracks?.sparkie).toEqual({ level: 1, kills: 4 })
+    const missed = applyLiveEvent(store(character()), "as:1501:aria", {
+      type: "kills",
+      names: ["Sparkie"],
+      at: "2026-10-18T12:06:00.000Z",
+    })
+    expect(missed.characters[0]?.petTracks).toBeUndefined()
+  })
+
   it("does nothing when no character is selected", () => {
     const base = store(character())
     expect(applyLiveEvent(base, null, { type: "odyle", amount: 1, at: "2026-10-18T12:00:00.000Z" })).toBe(base)

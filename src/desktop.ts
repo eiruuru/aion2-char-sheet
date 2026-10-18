@@ -18,7 +18,7 @@ type TrackerBridge = {
   onUpdate: (callback: (status: UpdateStatus) => void) => () => void
   getLiveSync: () => Promise<LiveStatus & { npcap: boolean }>
   setLiveSync: (on: boolean) => Promise<LiveStatus & { npcap: boolean }>
-  markLiveSync: (kind: "pet" | "odyle") => Promise<boolean>
+  setLiveRoster: (names: string[]) => Promise<void>
   findAdapter: () => Promise<boolean>
   onLiveEvent: (callback: (event: LiveEvent) => void) => () => void
 }

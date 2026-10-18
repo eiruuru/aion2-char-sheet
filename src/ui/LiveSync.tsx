@@ -40,29 +40,24 @@ export function LiveSyncNote({
   status,
   characterName,
   desktop,
-  onMark,
   onFindAdapter,
 }: {
   status: LiveStatus
   characterName: string | null
   desktop: boolean
-  onMark: (kind: "pet" | "odyle") => void
   onFindAdapter: () => void
 }) {
   if (!desktop) return <p className="muted live-note">Live Sync runs in the Windows app. Install Npcap, then turn it on there.</p>
   const watching = status.phase === "capturing" || status.phase === "needs-relog" || status.phase === "starting" || status.phase === "needs-adapter"
-  const packets = status.phase === "capturing" || status.phase === "needs-relog"
   return (
     <div className="live-note">
       <p className="muted">
         {status.detail || "Passive Npcap read. It does not log in or change the game."}
-        {characterName && watching ? ` Bound to ${characterName}.` : ""}
+        {characterName && watching ? ` Following ${characterName}.` : ""}
       </p>
       {watching ? (
         <div className="live-marks">
           <button type="button" onClick={onFindAdapter}>Find Adapter</button>
-          {packets ? <button type="button" onClick={() => onMark("pet")}>Mark pet soul gain</button> : null}
-          {packets ? <button type="button" onClick={() => onMark("odyle")}>Mark Odyle change</button> : null}
         </div>
       ) : null}
     </div>

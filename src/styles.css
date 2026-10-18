@@ -211,6 +211,58 @@ button.quiet { background: transparent; color: var(--text); border: 1px solid va
   color: var(--muted);
 }
 .live-note { margin: 0; display: grid; gap: 0.45rem; }
+.pets-screen {
+  display: grid;
+  gap: 0.9rem;
+  min-height: 0;
+}
+.pets-head { display: flex; align-items: center; gap: 0.9rem; }
+.pets-head h2, .pet-detail h3 { margin: 0; }
+.pets-head p { margin: 0.15rem 0 0; }
+.pet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.7rem;
+  max-height: calc(100vh - 9rem);
+  overflow: auto;
+}
+.pet-tile {
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  padding: 0.75rem 0.5rem;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  text-align: center;
+}
+.pet-tile.active { border-color: var(--accent); }
+.pet-tile-name { font-weight: 650; }
+.pet-portrait {
+  width: 3.2rem;
+  height: 3.2rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  object-fit: cover;
+  background: #2a2118;
+  color: var(--on-accent);
+  font-weight: 700;
+}
+.pet-portrait.genus-cogni { background: #6a3a22; }
+.pet-portrait.genus-fera { background: #8a4b16; }
+.pet-portrait.genus-natura { background: #3d5a32; }
+.pet-portrait.genus-varian { background: #3a3f6a; }
+.pet-portrait.genus-special { background: #6a3048; }
+.pet-detail { display: grid; gap: 0.8rem; max-width: 36rem; }
+.pet-detail-top { display: flex; align-items: center; gap: 0.8rem; }
+.pet-mobs { list-style: none; padding: 0; margin: 0.35rem 0 0; display: grid; gap: 0.35rem; }
+button.quiet {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line);
+}
 .live-marks { display: flex; flex-wrap: wrap; gap: 0.45rem; }
 .live-marks button {
   padding: 0.35rem 0.6rem;

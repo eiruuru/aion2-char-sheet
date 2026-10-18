@@ -1,7 +1,8 @@
 import type { RegionId } from "../api/types"
 import { emptyProgress, migrateSharedKeys, syncProgress, type ChecklistProgress } from "./checklist"
 import type { OdyleReading } from "./odyle"
-import { normalizePetProgress, type PetProgress } from "./petProgress"
+import { normalizePetProgress, normalizePetTracks, seedTrackFromProgress, type PetProgress, type PetTrack } from "./petProgress"
+import { petById } from "./pets"
 import { historySnapshot, type Snapshot } from "./snapshot"
 
 export type Resources = {
@@ -25,6 +26,8 @@ export type CharacterRecord = {
   addedAt: string
   odyle: OdyleReading | null
   petProgress?: PetProgress | null
+  petTracks?: Record<string, PetTrack>
+  trackingPetId?: string
   resources: Resources
   latest: Snapshot | null
   history: Snapshot[]
@@ -43,6 +46,20 @@ const HISTORY_LIMIT = 30
 
 export const EMPTY_RESOURCES: Resources = { crystals: null, kinah: null, abyss: null }
 
+function normalizeCharacterPets(character: CharacterRecord): CharacterRecord {
+  const petProgress = normalizePetProgress(character.petProgress)
+  const petTracks = normalizePetTracks(character.petTracks)
+  let trackingPetId = petById(character.trackingPetId) ? character.trackingPetId : undefined
+  if (!trackingPetId && petProgress) {
+    const seeded = seedTrackFromProgress(petProgress)
+    if (seeded) {
+      if (!petTracks[seeded.id]) petTracks[seeded.id] = seeded.track
+      trackingPetId = seeded.id
+    }
+  }
+  return { ...character, petProgress, petTracks, trackingPetId }
+}
+
 export function emptyStore(now = Date.now()): StoreData {
   return { version: 1, membership: false, characters: [], checklist: emptyProgress(now) }
 }
@@ -51,10 +68,7 @@ export function normalizeStore(store: StoreData, now = Date.now()): StoreData {
   return {
     version: 1,
     membership: Boolean(store.membership),
-    characters: store.characters.map((character) => ({
-      ...character,
-      petProgress: normalizePetProgress(character.petProgress),
-    })),
+    characters: store.characters.map((character) => normalizeCharacterPets(character)),
     checklist: migrateSharedKeys(syncProgress(store.checklist ?? emptyProgress(now), now), store.characters),
     selectedId: typeof store.selectedId === "string" && store.selectedId ? store.selectedId : undefined,
   }

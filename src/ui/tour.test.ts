@@ -5,6 +5,7 @@ import {
   placeCard,
   clearOnboardingSeen,
   readOnboardingSeen,
+  shouldOpenOnboarding,
   visibleSteps,
   writeOnboardingSeen,
   type Rect,
@@ -35,6 +36,12 @@ describe("onboarding steps", () => {
     expect(saved.has(ONBOARDING_KEY)).toBe(false)
     expect(saved.has("aion2-tracker-v1")).toBe(false)
     expect(readOnboardingSeen(storage)).toBe(false)
+  })
+
+  it("stays closed when a roster is already saved", () => {
+    expect(shouldOpenOnboarding(2, false)).toBe(false)
+    expect(shouldOpenOnboarding(0, false)).toBe(true)
+    expect(shouldOpenOnboarding(0, true)).toBe(false)
   })
 
   it("shows the sheet steps when a character is selected", () => {

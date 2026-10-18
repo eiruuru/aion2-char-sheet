@@ -7,6 +7,8 @@ const NPCAP_FILES = [
 
 const RING_LIMIT = 24
 const SAMPLE_BYTES = 128
+const SCAN_BYTES = 256
+const ODYLE_CAPS = new Set([560, 840])
 
 function npcapPresent(exists = fs.existsSync) {
   return NPCAP_FILES.some((file) => {
@@ -97,6 +99,90 @@ function decodePacket(buf, layout) {
   return found
 }
 
+function cleanName(text) {
+  const trimmed = String(text || "").replace(/\s+/g, " ").trim()
+  if (trimmed.length < 3 || trimmed.length > 40) return null
+  if (!/^[A-Za-z][A-Za-z' -]*[A-Za-z]$/.test(trimmed)) return null
+  if (!/[A-Z]/.test(trimmed)) return null
+  return trimmed
+}
+
+function pushName(found, seen, text) {
+  const name = cleanName(text)
+  if (!name) return
+  const key = name.toLowerCase()
+  if (seen.has(key)) return
+  seen.add(key)
+  found.push(name)
+}
+
+function extractNames(buf) {
+  if (!buf || typeof buf.length !== "number") return []
+  const limit = Math.min(buf.length, SCAN_BYTES)
+  const found = []
+  const seen = new Set()
+  let run = ""
+  for (let i = 0; i < limit; i += 1) {
+    const code = buf[i]
+    if (code >= 32 && code < 127 && /[A-Za-z' -]/.test(String.fromCharCode(code))) {
+      run += String.fromCharCode(code)
+    } else {
+      pushName(found, seen, run)
+      run = ""
+    }
+  }
+  pushName(found, seen, run)
+  let wide = ""
+  for (let i = 0; i + 1 < limit; i += 2) {
+    const code = buf[i]
+    const high = buf[i + 1]
+    if (high === 0 && code >= 32 && code < 127 && /[A-Za-z' -]/.test(String.fromCharCode(code))) {
+      wide += String.fromCharCode(code)
+    } else {
+      pushName(found, seen, wide)
+      wide = ""
+    }
+  }
+  pushName(found, seen, wide)
+  return found
+}
+
+function matchRosterName(names, roster) {
+  const list = (roster || []).filter((entry) => typeof entry === "string" && entry.trim())
+  for (const name of names || []) {
+    const hit = list.find((entry) => entry.toLowerCase() === String(name).toLowerCase())
+    if (hit) return hit
+  }
+  return null
+}
+
+function findOdyleTotal(buf) {
+  if (!buf || typeof buf.length !== "number") return null
+  const limit = Math.min(buf.length, SCAN_BYTES)
+  for (const width of [4, 2]) {
+    for (let offset = 0; offset + width <= limit; offset += width) {
+      const value = readInt(buf, offset, width)
+      if (!ODYLE_CAPS.has(value)) continue
+      for (const neighbor of [offset - width, offset + width]) {
+        const amount = readInt(buf, neighbor, width)
+        if (amount == null || amount < 0 || amount > 2000 || ODYLE_CAPS.has(amount)) continue
+        return amount
+      }
+    }
+  }
+  return null
+}
+
+function isVirtualAdapter(device) {
+  const text = `${device?.name || ""} ${device?.description || ""}`.toLowerCase()
+  if (!text.trim()) return true
+  return /loopback|bluetooth|virtual|hyper-v|wsl|vbox|vmware|wan miniport|tunnel|pseudo|teredo|isatap/.test(text)
+}
+
+function realAdapters(devices) {
+  return (devices || []).filter((device) => device && typeof device.name === "string" && device.name && !isVirtualAdapter(device))
+}
+
 function pickAdapter(rows) {
   let best = null
   for (const row of rows || []) {
@@ -137,5 +223,10 @@ module.exports = {
   applyConfirmed,
   decodePacket,
   createRing,
+  extractNames,
+  matchRosterName,
+  findOdyleTotal,
+  isVirtualAdapter,
+  realAdapters,
   pickAdapter,
 }

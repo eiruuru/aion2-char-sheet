@@ -1,33 +1,34 @@
 const readline = require("readline")
 const {
   npcapPresent,
-  proposeField,
-  emptyLayout,
-  confirmField,
-  applyConfirmed,
-  decodePacket,
-  createRing,
-  pickAdapter,
+  extractNames,
+  matchRosterName,
+  findOdyleTotal,
+  realAdapters,
 } = require("./decode.cjs")
 
 const SNIFF_MS = 2500
+const KILL_GAP_MS = 1500
+const FLUSH_MS = 300
 const NOT_DETECTED = "Game packets have not been detected yet. Move or attack, then run Find Adapter."
 
-const hits = {}
-let layout = emptyLayout()
-let ring = createRing()
 let capturing = false
 let capHandle = null
-let sawDecode = false
-let sawPackets = false
 let capModule = null
+let roster = []
+let boundName = ""
+let lastOdyle = null
+let sawPackets = false
+const killSeen = new Map()
+let pendingKills = []
+let flushTimer = null
 
 function emit(event) {
   process.stdout.write(`${JSON.stringify(event)}\n`)
 }
 
-function status(phase, detail) {
-  emit({ type: "status", phase, detail: detail ?? "", boundName: "" })
+function status(phase, detail, name = boundName) {
+  emit({ type: "status", phase, detail: detail ?? "", boundName: name })
 }
 
 function loadCap() {
@@ -40,36 +41,13 @@ function loadCap() {
   return capModule
 }
 
-function closeHandle() {
+function closeHandle(handle = capHandle) {
   try {
-    capHandle?.close()
+    handle?.close()
   } catch {
     // already closed
   }
-  capHandle = null
-}
-
-function countUdp(cap, device, ms) {
-  return new Promise((resolve) => {
-    const handle = new cap.Cap()
-    const buffer = Buffer.alloc(65535)
-    let udp = 0
-    try {
-      handle.open(device, "udp", 10 * 1024 * 1024, buffer)
-      if (handle.setMinBytes) handle.setMinBytes(0)
-      handle.on("packet", (nbytes) => {
-        const payload = payloadFromPacket(cap, buffer, nbytes)
-        if (payload && payload.length >= 8) udp += 1
-      })
-    } catch {
-      resolve(0)
-      return
-    }
-    setTimeout(() => {
-      try { handle.close() } catch { /* already closed */ }
-      resolve(udp)
-    }, ms)
-  })
+  if (handle === capHandle) capHandle = null
 }
 
 function payloadFromPacket(cap, buffer, nbytes) {
@@ -79,11 +57,9 @@ function payloadFromPacket(cap, buffer, nbytes) {
     if (!ethernet || ethernet.info.type !== decoders.PROTOCOL.ETHERNET.IPV4) return null
     const ip = decoders.IPV4(buffer, ethernet.offset)
     if (!ip) return null
-    const header = ip.info.protocol === decoders.PROTOCOL.IP.TCP
-      ? decoders.TCP(buffer, ip.offset)
-      : ip.info.protocol === decoders.PROTOCOL.IP.UDP
-        ? decoders.UDP(buffer, ip.offset)
-        : null
+    const header = ip.info.protocol === decoders.PROTOCOL.IP.UDP
+      ? decoders.UDP(buffer, ip.offset)
+      : null
     if (!header) return null
     const start = header.offset
     const end = Math.min(nbytes, ip.offset + ip.info.totallen)
@@ -94,41 +70,90 @@ function payloadFromPacket(cap, buffer, nbytes) {
   }
 }
 
-function noteSample(bytes) {
-  ring.push(bytes, Date.now())
-  const found = decodePacket(bytes, layout)
-  if (found.odyle == null && found.souls == null && found.level == null) return
-  sawDecode = true
-  const at = new Date().toISOString()
-  if (found.odyle != null) emit({ type: "odyle", amount: found.odyle, at })
-  if (found.souls != null || found.level != null || found.soulsToNext != null) {
-    emit({
-      type: "pet",
-      at,
-      ...(found.level != null ? { level: found.level } : {}),
-      ...(found.souls != null ? { souls: found.souls } : {}),
-      ...(found.soulsToNext != null ? { soulsToNext: found.soulsToNext } : {}),
-    })
+function openListen(cap, deviceName, onSlice) {
+  const handle = new cap.Cap()
+  const buffer = Buffer.alloc(65535)
+  handle.open(deviceName, "udp", 10 * 1024 * 1024, buffer)
+  if (handle.setMinBytes) handle.setMinBytes(0)
+  handle.on("packet", (nbytes) => {
+    const payload = payloadFromPacket(cap, buffer, nbytes)
+    if (!payload || payload.length < 8) return
+    onSlice(Buffer.from(payload.subarray(0, Math.min(payload.length, 256))))
+  })
+  return handle
+}
+
+function flushKills() {
+  flushTimer = null
+  if (!pendingKills.length) return
+  const names = pendingKills
+  pendingKills = []
+  emit({ type: "kills", names, at: new Date().toISOString() })
+}
+
+function noteKill(name) {
+  const key = name.toLowerCase()
+  const now = Date.now()
+  const last = killSeen.get(key) || 0
+  if (now - last < KILL_GAP_MS) return
+  killSeen.set(key, now)
+  if (killSeen.size > 200) {
+    const oldest = killSeen.keys().next().value
+    if (oldest) killSeen.delete(oldest)
+  }
+  pendingKills.push(name)
+  if (!flushTimer) flushTimer = setTimeout(flushKills, FLUSH_MS)
+}
+
+function notePayload(slice) {
+  const names = extractNames(slice)
+  const who = matchRosterName(names, roster)
+  if (who && who !== boundName) {
+    boundName = who
+    emit({ type: "character", name: who })
+    status("capturing", `Live readings are updating ${who}.`, who)
+  }
+  const amount = findOdyleTotal(slice)
+  if (amount != null && amount !== lastOdyle) {
+    lastOdyle = amount
+    emit({ type: "odyle", amount, at: new Date().toISOString() })
+  }
+  const rosterKeys = new Set(roster.map((name) => name.toLowerCase()))
+  for (const name of names) {
+    if (rosterKeys.has(name.toLowerCase())) continue
+    noteKill(name)
+  }
+  if (!sawPackets) {
+    sawPackets = true
+    if (!boundName) status("capturing", roster.length ? "Waiting for a roster character." : "Packets are arriving.")
   }
 }
 
 function bindingReady() {
   if (!npcapPresent()) {
-    status("needs-npcap", "Install Npcap, then turn Live Sync on again.")
+    status("needs-npcap", "Install Npcap, then turn Live Sync on again.", "")
     return null
   }
   const cap = loadCap()
   if (!cap?.Cap) {
-    status("unavailable", "Npcap is installed. This build has no capture binding yet, so readings stay manual.")
+    status("unavailable", "Npcap is installed. This build has no capture binding yet, so readings stay manual.", "")
     return null
   }
   return cap
 }
 
-function startCapture(deviceName) {
+function watchDevice(cap, deviceName) {
   closeHandle()
-  sawDecode = false
   sawPackets = false
+  const handle = openListen(cap, deviceName, (slice) => {
+    if (capHandle === handle) notePayload(slice)
+  })
+  capHandle = handle
+  capturing = true
+  return handle
+}
+
+function startCapture(deviceName) {
   const cap = bindingReady()
   if (!cap) {
     capturing = false
@@ -137,32 +162,16 @@ function startCapture(deviceName) {
   const device = typeof deviceName === "string" ? deviceName : ""
   if (!device) {
     capturing = true
-    status("needs-adapter", NOT_DETECTED)
+    status("needs-adapter", NOT_DETECTED, "")
     return
   }
   try {
-    const handle = new cap.Cap()
-    const buffer = Buffer.alloc(65535)
-    status("needs-adapter", NOT_DETECTED)
-    handle.open(device, "udp", 10 * 1024 * 1024, buffer)
-    if (handle.setMinBytes) handle.setMinBytes(0)
-    handle.on("packet", (nbytes) => {
-      const payload = payloadFromPacket(cap, buffer, nbytes)
-      if (!payload || payload.length < 8) return
-      if (!sawPackets) {
-        sawPackets = true
-        status("needs-relog", "Packets are arriving. Re-log or teleport once, then mark a pet soul gain or an Odyle change.")
-      }
-      const before = sawDecode
-      noteSample(Buffer.from(payload))
-      if (!before && sawDecode) status("capturing", "Live readings are updating the selected character.")
-    })
-    capHandle = handle
-    capturing = true
+    status("needs-adapter", NOT_DETECTED, boundName)
+    watchDevice(cap, device)
   } catch (error) {
     capturing = false
     const message = error instanceof Error ? error.message : "Could not open Npcap."
-    status("unavailable", `${message} Start this app the same way you start NotMeter.`)
+    status("unavailable", `${message} Start this app the same way you start NotMeter.`, "")
   }
 }
 
@@ -170,58 +179,64 @@ async function findAdapter() {
   const cap = bindingReady()
   if (!cap) return
   closeHandle()
-  status("starting", "Finding the adapter. Keep moving or attacking.")
-  const devices = cap.Cap.deviceList?.() || []
-  const rows = []
-  for (const device of devices) {
-    if (!device?.name) continue
-    const udp = await countUdp(cap, device.name, SNIFF_MS)
-    rows.push({ name: device.name, description: device.description || "", udp })
+  sawPackets = false
+  status("starting", "Finding the adapter. Keep moving or attacking.", boundName)
+  const devices = realAdapters(cap.Cap.deviceList?.() || [])
+  const opened = []
+  let settled = false
+  let timer = null
+  const winner = await new Promise((resolve) => {
+    const finish = (found) => {
+      if (settled) return
+      settled = true
+      if (timer) clearTimeout(timer)
+      resolve(found)
+    }
+    for (const device of devices) {
+      try {
+        const handle = openListen(cap, device.name, (slice) => {
+          if (!settled) finish({ device, handle })
+          if (capHandle === handle) notePayload(slice)
+        })
+        opened.push(handle)
+      } catch {
+        // this device would not open
+      }
+    }
+    if (!opened.length) finish(null)
+    else timer = setTimeout(() => finish(null), SNIFF_MS)
+  })
+  for (const handle of opened) {
+    if (!winner || handle !== winner.handle) closeHandle(handle)
   }
-  const best = pickAdapter(rows)
-  if (!best) {
+  if (!winner) {
+    capturing = false
     emit({ type: "adapter", device: "", description: "", udp: 0 })
-    status("needs-adapter", NOT_DETECTED)
+    status("needs-adapter", NOT_DETECTED, boundName)
     return
   }
-  emit({ type: "adapter", device: best.name, description: best.description, udp: best.udp })
-  startCapture(best.name)
+  capHandle = winner.handle
+  capturing = true
+  emit({
+    type: "adapter",
+    device: winner.device.name,
+    description: typeof winner.device.description === "string" ? winner.device.description : "",
+    udp: 1,
+  })
+  status("capturing", boundName ? `Live readings are updating ${boundName}.` : "Packets are arriving.", boundName)
 }
 
 function stopCapture() {
   capturing = false
   closeHandle()
-  status("off", "")
+  if (flushTimer) clearTimeout(flushTimer)
+  flushTimer = null
+  pendingKills = []
+  status("off", "", "")
 }
 
-function mark(kind) {
-  const pair = ring.pair()
-  if (!pair) {
-    emit({ type: "discovery", note: "Not enough packets yet. Re-log, change the value in game, then mark again." })
-    return
-  }
-  const direction = kind === "odyle" ? "any" : "increase"
-  const field = proposeField(pair.before.bytes, pair.after.bytes, direction)
-  if (!field) {
-    emit({ type: "discovery", note: "No small integer changed between the last two packets." })
-    return
-  }
-  const confirmed = confirmField(hits, kind === "odyle" ? "odyle" : "pet", field)
-  if (confirmed) layout = applyConfirmed(layout, kind === "odyle" ? "odyle" : "pet", confirmed)
-  emit({
-    type: "discovery",
-    note: confirmed
-      ? `Locked ${kind} at offset ${confirmed.offset}.`
-      : `Candidate ${kind} offset ${field.offset} (${field.before} → ${field.after}). Mark the same change once more to lock it.`,
-    layout,
-  })
-  if (confirmed) {
-    const found = decodePacket(pair.after.bytes, layout)
-    noteSample(pair.after.bytes)
-    if (found.odyle == null && found.souls == null) {
-      emit({ type: "discovery", note: "Field locked, but the latest packet did not hold a usable value yet." })
-    }
-  }
+function setRoster(names) {
+  roster = (Array.isArray(names) ? names : []).filter((name) => typeof name === "string" && name.trim())
 }
 
 function onCommand(line) {
@@ -234,12 +249,9 @@ function onCommand(line) {
   if (command.cmd === "start") startCapture(command.device)
   if (command.cmd === "find") void findAdapter()
   if (command.cmd === "stop") stopCapture()
-  if (command.cmd === "mark") mark(command.kind === "odyle" ? "odyle" : "pet")
-  if (command.cmd === "layout" && command.layout && typeof command.layout === "object") {
-    layout = command.layout
-  }
+  if (command.cmd === "roster") setRoster(command.names)
 }
 
-status("off", "")
+status("off", "", "")
 const input = readline.createInterface({ input: process.stdin })
 input.on("line", onCommand)

@@ -28,8 +28,9 @@ import { factionName } from "./api/serverList"
 import { rosterOrder } from "./model/suggestions"
 import { CUBE_COST, odyleCap, projectOdyle, shiftOdyleClock, spendOdyleReading, type OdyleProjection } from "./model/odyle"
 import { desktopBridge } from "./desktop"
-import { applyLiveEvent, emptyLiveStatus, type LiveStatus } from "./model/liveSync"
-import type { PetProgress } from "./model/petProgress"
+import { applyLiveEvent, emptyLiveStatus, progressFromTrack, type LiveStatus } from "./model/liveSync"
+import type { PetTrack } from "./model/petProgress"
+import { petByName } from "./model/pets"
 import { APP_VERSION, reduceUpdateStatus, UPDATE_SKIP_KEY, WINDOW_TITLE, type UpdateOffer } from "./model/updates"
 import { AddCharacter } from "./ui/AddCharacter"
 import { CharacterPanel } from "./ui/CharacterPanel"
@@ -37,8 +38,9 @@ import { GoalsPanel } from "./ui/Goals"
 import { LiveSyncButton, LiveSyncNote } from "./ui/LiveSync"
 import { ExportIcon, ImportIcon, MembershipIcon, PinIcon, TrashIcon, UpdateIcon } from "./ui/icons"
 import { Onboarding } from "./ui/Onboarding"
+import { PetsScreen } from "./ui/Pets"
 import { SAMPLE_ID, charactersForTour, sampleProgress } from "./ui/sampleSheet"
-import { clearOnboardingSeen, readOnboardingSeen, writeOnboardingSeen } from "./ui/tour"
+import { clearOnboardingSeen, readOnboardingSeen, shouldOpenOnboarding, writeOnboardingSeen } from "./ui/tour"
 
 const REFRESH_MS = 20 * 60 * 1000
 let profileRefresh: Promise<void> | null = null
@@ -59,12 +61,15 @@ export function App() {
   const [focusToken, setFocusToken] = useState(0)
   const [now, setNow] = useState(() => Date.now())
   const [aboveGame, setAboveGame] = useState(false)
-  const [tourOpen, setTourOpen] = useState(() => !readOnboardingSeen(localStorage))
+  const [tourOpen, setTourOpen] = useState(() => shouldOpenOnboarding(loadStore().characters.length, readOnboardingSeen(localStorage)))
+  const [screen, setScreen] = useState<"sheet" | "pets">("sheet")
+  const [recentMobs, setRecentMobs] = useState<string[]>([])
+  const [detailPetId, setDetailPetId] = useState<string | null>(null)
   const [updateOffer, setUpdateOffer] = useState<UpdateOffer | null>(null)
   const [updateNotice, setUpdateNotice] = useState("")
   const desktop = desktopBridge()
   const [liveStatus, setLiveStatus] = useState<LiveStatus>(() => emptyLiveStatus())
-  const selectedLiveRef = useRef<string | null>(null)
+  const boundIdRef = useRef<string | null>(null)
   const updateAsked = useRef(false)
   const updateOfferRef = useRef<UpdateOffer | null>(null)
   const storeRef = useRef(store)
@@ -127,7 +132,20 @@ export function App() {
     [shownCharacters, store.membership, now],
   )
   const selected = ordered.find((character) => character.id === chooseCharacter(selectedId, ordered.map((character) => character.id))) ?? null
-  selectedLiveRef.current = selected && selected.id !== SAMPLE_ID ? selected.id : null
+  const followedId = selected && selected.id !== SAMPLE_ID ? selected.id : null
+  const followedTrack = useRef<string | null>(followedId)
+  useEffect(() => {
+    if (followedTrack.current === followedId) return
+    followedTrack.current = followedId
+    const next = store.characters.find((character) => character.id === followedId)
+    setDetailPetId(next?.trackingPetId ?? null)
+  }, [followedId, store.characters])
+
+  useEffect(() => {
+    if (!desktop?.setLiveRoster) return
+    const names = store.characters.map((character) => character.name).filter(Boolean)
+    void desktop.setLiveRoster(names)
+  }, [desktop, store.characters])
 
   useEffect(() => {
     if (!desktop?.onLiveEvent) return
@@ -144,7 +162,7 @@ export function App() {
         setLiveStatus((current) => ({
           phase: event.phase,
           detail: event.detail ?? "",
-          boundName: event.boundName || (selectedLiveRef.current ? current.boundName : ""),
+          boundName: event.boundName ?? current.boundName,
           experimental: current.experimental,
         }))
         return
@@ -153,8 +171,21 @@ export function App() {
         setLiveStatus((current) => ({ ...current, detail: event.note }))
         return
       }
-      const id = selectedLiveRef.current
-      if (!id) return
+      if (event.type === "character") {
+        const name = event.name.trim().toLowerCase()
+        const matches = storeRef.current.characters.filter((character) => character.name.toLowerCase() === name)
+        const match = matches.find((character) => character.id === boundIdRef.current) ?? matches[0]
+        if (!match) return
+        boundIdRef.current = match.id
+        setSelectedId(match.id)
+        setLiveStatus((status) => ({ ...status, boundName: match.name, phase: status.phase === "off" ? status.phase : "capturing" }))
+        return
+      }
+      if (event.type === "kills") {
+        setRecentMobs((current) => [...event.names, ...current].slice(0, 12))
+      }
+      const id = boundIdRef.current
+      if (!id || event.type === "pet") return
       setStore((current) => applyLiveEvent(current, id, event))
       setNow(Date.now())
     })
@@ -278,8 +309,40 @@ export function App() {
     }))
   }
 
-  function savePet(progress: PetProgress) {
-    updateSelected((character) => ({ ...character, petProgress: progress }))
+  function savePet(characterId: string, petId: string, track: PetTrack) {
+    const at = new Date().toISOString()
+    setStore((current) => ({
+      ...current,
+      characters: current.characters.map((character) => (
+        character.id === characterId
+          ? {
+              ...character,
+              trackingPetId: character.trackingPetId || petId,
+              petTracks: { ...(character.petTracks ?? {}), [petId]: track },
+              petProgress: progressFromTrack(petId, track, at, "manual"),
+            }
+          : character
+      )),
+    }))
+  }
+
+  function openPet(characterId: string, petId: string) {
+    setDetailPetId(petId)
+    setStore((current) => ({
+      ...current,
+      characters: current.characters.map((character) => {
+        if (character.id !== characterId) return character
+        const existing = character.petTracks?.[petId]
+        const profile = petByName(character.latest?.pet?.name)?.id === petId ? character.latest?.pet?.level ?? 0 : 0
+        const track = existing ?? { level: profile, kills: 0 }
+        return {
+          ...character,
+          trackingPetId: petId,
+          petTracks: { ...(character.petTracks ?? {}), [petId]: track },
+          petProgress: progressFromTrack(petId, track, new Date().toISOString(), character.petProgress?.source ?? "manual"),
+        }
+      }),
+    }))
   }
 
   function saveOdyle(amount: number) {
@@ -426,8 +489,16 @@ export function App() {
         </div>
         <div className="actions">
           <span className="app-version">v{APP_VERSION}</span>
+          <button
+            type="button"
+            className={screen === "pets" ? "live-sync on" : "live-sync"}
+            aria-pressed={screen === "pets"}
+            onClick={() => setScreen((current) => current === "pets" ? "sheet" : "pets")}
+          >
+            Pets
+          </button>
           <LiveSyncButton
-            status={{ ...liveStatus, boundName: selected && selected.id !== SAMPLE_ID ? selected.name : "" }}
+            status={liveStatus}
             desktop={Boolean(desktop)}
             onToggle={() => {
               if (!desktop) {
@@ -439,7 +510,7 @@ export function App() {
                 setLiveStatus({
                   phase: status.phase,
                   detail: status.detail,
-                  boundName: selected && selected.id !== SAMPLE_ID ? selected.name : "",
+                  boundName: status.boundName || liveStatus.boundName,
                   experimental: status.experimental,
                 })
               })
@@ -534,6 +605,24 @@ export function App() {
         </section>
       ) : null}
       {error ? <p className="error banner">{error}</p> : null}
+      {screen === "pets" ? (
+        <PetsScreen
+          character={selected && selected.id !== SAMPLE_ID ? selected : null}
+          waiting={Boolean(desktop) && !liveStatus.boundName && (liveStatus.phase === "capturing" || liveStatus.phase === "starting" || liveStatus.phase === "needs-relog")}
+          recentMobs={recentMobs}
+          detailId={detailPetId}
+          onBack={() => setScreen("sheet")}
+          onOpen={(petId) => {
+            if (!selected || selected.id === SAMPLE_ID) return
+            openPet(selected.id, petId)
+          }}
+          onCloseDetail={() => setDetailPetId(null)}
+          onSaveTrack={(petId, track) => {
+            if (!selected || selected.id === SAMPLE_ID) return
+            savePet(selected.id, petId, track)
+          }}
+        />
+      ) : (
       <div className="workspace">
         <div className="character-column">
           <section className="roster-bar panel" data-tour="roster">
@@ -599,18 +688,21 @@ export function App() {
           onSaveOdyle={saveOdyle}
           onSetOdyleTimer={setOdyleTimer}
           onSpendCube={spendCube}
-          onSavePet={savePet}
+          onSavePet={(petId, track) => {
+            if (!selected || selected.id === SAMPLE_ID) return
+            savePet(selected.id, petId, track)
+          }}
           liveNote={(
             <LiveSyncNote
               status={liveStatus}
-              characterName={selected && selected.id !== SAMPLE_ID ? selected.name : null}
+              characterName={liveStatus.boundName || null}
               desktop={Boolean(desktop)}
-              onMark={(kind) => { void desktop?.markLiveSync(kind) }}
               onFindAdapter={() => { void desktop?.findAdapter() }}
             />
           )}
         />
       </div>
+      )}
       {tourOpen ? (
         <Onboarding
           hasCharacter={Boolean(selected)}

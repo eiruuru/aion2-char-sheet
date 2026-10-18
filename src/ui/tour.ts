@@ -83,6 +83,11 @@ export function visibleSteps(context: TourContext): TourStep[] {
   return steps
 }
 
+export function shouldOpenOnboarding(characterCount: number, seen: boolean): boolean {
+  if (characterCount > 0) return false
+  return !seen
+}
+
 export function readOnboardingSeen(storage: Pick<Storage, "getItem">): boolean {
   try {
     return storage.getItem(ONBOARDING_KEY) === "done"

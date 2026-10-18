@@ -1,3 +1,5 @@
+import { petById, petByName, soulsToNext } from "./pets"
+
 export type PetProgressSource = "manual" | "live"
 
 export type PetProgress = {
@@ -12,6 +14,47 @@ export type PetProgress = {
 export function petFill(progress: PetProgress): number {
   if (progress.soulsToNext == null || progress.soulsToNext <= 0) return 0
   return Math.max(0, Math.min(1, progress.souls / progress.soulsToNext))
+}
+
+export type PetTrack = {
+  level: number
+  kills: number
+}
+
+export function trackFill(track: PetTrack): number {
+  const next = soulsToNext(track.level)
+  if (next == null || next <= 0) return 1
+  return Math.max(0, Math.min(1, track.kills / next))
+}
+
+export function emptyPetTrack(level = 0): PetTrack {
+  return { level, kills: 0 }
+}
+
+export function normalizePetTrack(value: unknown): PetTrack | null {
+  if (!value || typeof value !== "object") return null
+  const raw = value as Partial<PetTrack>
+  const level = finiteFloor(raw.level)
+  const kills = finiteFloor(raw.kills)
+  if (level == null || kills == null) return null
+  return { level: Math.min(level, 3), kills }
+}
+
+export function normalizePetTracks(value: unknown): Record<string, PetTrack> {
+  if (!value || typeof value !== "object") return {}
+  const tracks: Record<string, PetTrack> = {}
+  for (const [id, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!petById(id)) continue
+    const track = normalizePetTrack(raw)
+    if (track) tracks[id] = track
+  }
+  return tracks
+}
+
+export function seedTrackFromProgress(progress: PetProgress | null | undefined): { id: string; track: PetTrack } | null {
+  const pet = petByName(progress?.name)
+  if (!pet || !progress) return null
+  return { id: pet.id, track: { level: Math.min(progress.level, 3), kills: progress.souls } }
 }
 
 export function normalizePetProgress(value: unknown): PetProgress | null {

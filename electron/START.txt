@@ -4,4 +4,4 @@ Install with Aion 2 Progress Setup.exe. Opening the app later checks GitHub for 
 
 Your roster and the "keep this window above the game" setting are saved in %APPDATA%\Aion 2 Progress. Installing an update does not remove them. If an older copy left aion2-tracker.json or aion2-window.json next to the exe, the first launch copies those into that folder.
 
-The app reads public character pages. Odyle, pet souls, and the other wallet numbers can be typed in, then Odyle counts forward on its clock. Optional Live Sync needs Npcap and only reads your own traffic. It does not attach to the game or change it.
+The app reads public character pages. Odyle, pet levels, and the other wallet numbers can be typed in, then Odyle counts forward on its clock. Optional Live Sync needs Npcap and only reads your own traffic. It does not attach to the game or change it. Find Adapter listens on every real network device at once. Open a pet to count kills from any mob. Readings follow whichever roster character is logged in.

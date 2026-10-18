@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import type { CharacterRecord } from "../model/store"
 import { parseStoredNumber } from "../model/store"
-import { petFill, type PetProgress } from "../model/petProgress"
+import { trackFill, type PetTrack } from "../model/petProgress"
+import { petById, soulsToNext } from "../model/pets"
 import { formatCountdown, formatNumber } from "../model/format"
 import { CUBE_COST, type OdyleProjection } from "../model/odyle"
 import { rosterGoals, type SessionItem } from "../model/checklist"
@@ -28,7 +29,7 @@ export function GoalsPanel({
   onSaveOdyle: (amount: number) => void
   onSetOdyleTimer: (remainingMs: number) => void
   onSpendCube: () => void
-  onSavePet: (progress: PetProgress) => void
+  onSavePet: (petId: string, track: PetTrack) => void
   liveNote: ReactNode
 }) {
   const [tab, setTab] = useState<"goals" | "class" | "general">("goals")
@@ -226,66 +227,54 @@ function OdyleCard({
   )
 }
 
-function PetCard({ character, onSave }: { character: CharacterRecord; onSave: (progress: PetProgress) => void }) {
+function PetCard({ character, onSave }: { character: CharacterRecord; onSave: (petId: string, track: PetTrack) => void }) {
+  const pet = petById(character.trackingPetId)
+  const track = pet ? character.petTracks?.[pet.id] ?? { level: 0, kills: 0 } : null
   const progress = character.petProgress ?? null
-  const profile = character.latest?.pet
-  const [levelDraft, setLevelDraft] = useState(progress ? String(progress.level) : profile?.level != null ? String(profile.level) : "")
-  const [soulsDraft, setSoulsDraft] = useState(progress ? String(progress.souls) : "")
-  const [nextDraft, setNextDraft] = useState(progress?.soulsToNext != null ? String(progress.soulsToNext) : "")
+  const [levelDraft, setLevelDraft] = useState(track ? String(track.level) : progress ? String(progress.level) : "")
+  const [killsDraft, setKillsDraft] = useState(track ? String(track.kills) : progress ? String(progress.souls) : "")
   useEffect(() => {
-    setLevelDraft(progress ? String(progress.level) : profile?.level != null ? String(profile.level) : "")
-    setSoulsDraft(progress ? String(progress.souls) : "")
-    setNextDraft(progress?.soulsToNext != null ? String(progress.soulsToNext) : "")
-  }, [character.id, progress?.updatedAt, progress?.level, progress?.souls, progress?.soulsToNext, profile?.level])
-  const fill = progress ? petFill(progress) : 0
-  const title = progress?.name || profile?.name || "Pet"
+    setLevelDraft(track ? String(track.level) : progress ? String(progress.level) : "")
+    setKillsDraft(track ? String(track.kills) : progress ? String(progress.souls) : "")
+  }, [character.id, character.trackingPetId, track?.level, track?.kills, progress?.updatedAt, progress?.level, progress?.souls])
+  const next = track ? soulsToNext(track.level) : null
+  const fill = track ? trackFill(track) : 0
+  const title = pet?.name || "Pet"
   return (
     <section className="panel odyle-card">
       <h2>Pet progress</h2>
       <p className="odyle-readout">
         <strong>{title}</strong>
-        {progress ? ` · Lv ${progress.level}` : profile?.level != null ? ` · profile Lv ${profile.level}` : null}
-        {progress?.source === "live" ? " · live" : null}
+        {track ? ` · Lv ${track.level}` : null}
       </p>
-      {progress && progress.soulsToNext ? (
+      {track && next ? (
         <>
-          <div className="meter" role="meter" aria-valuemin={0} aria-valuemax={progress.soulsToNext} aria-valuenow={Math.min(progress.souls, progress.soulsToNext)} aria-label="Pet souls">
+          <div className="meter" role="meter" aria-valuemin={0} aria-valuemax={next} aria-valuenow={Math.min(track.kills, next)} aria-label="Pet souls">
             <span style={{ width: `${fill * 100}%` }} />
           </div>
-          <p className="odyle-readout">{progress.souls} / {progress.soulsToNext} souls</p>
+          <p className="odyle-readout">{track.kills} / {next} souls</p>
         </>
-      ) : progress ? <p className="muted">{progress.souls} souls. Next level total is not set.</p> : <p className="muted">No soul count yet.</p>}
-      <div className="odyle-controls pet-controls">
-        <label>
-          Level
-          <input className="timer-input" inputMode="numeric" autoComplete="off" value={levelDraft} onChange={(event) => setLevelDraft(event.target.value)} />
-        </label>
-        <label>
-          Souls
-          <input inputMode="numeric" autoComplete="off" value={soulsDraft} onChange={(event) => setSoulsDraft(event.target.value)} />
-        </label>
-        <label>
-          Next
-          <input className="timer-input" inputMode="numeric" autoComplete="off" value={nextDraft} onChange={(event) => setNextDraft(event.target.value)} />
-        </label>
-        <button type="button" className="icon-button" aria-label="Save pet progress" title="Save pet progress" onClick={() => {
-          const level = parseStoredNumber(levelDraft)
-          const souls = parseStoredNumber(soulsDraft)
-          if (level == null || souls == null) return
-          const soulsToNext = nextDraft.trim() ? parseStoredNumber(nextDraft) : null
-          if (nextDraft.trim() && soulsToNext == null) return
-          onSave({
-            name: progress?.name || profile?.name,
-            level,
-            souls,
-            soulsToNext,
-            source: "manual",
-            updatedAt: new Date().toISOString(),
-          })
-        }}>
-          <CheckIcon />
-        </button>
-      </div>
+      ) : track ? <p className="muted">{track.kills} kills. This pet is at its highest level.</p> : <p className="muted">Open Pets and choose a portrait to count kills.</p>}
+      {pet ? (
+        <div className="odyle-controls pet-controls">
+          <label>
+            Level
+            <input className="timer-input" inputMode="numeric" autoComplete="off" value={levelDraft} onChange={(event) => setLevelDraft(event.target.value)} />
+          </label>
+          <label>
+            Kills
+            <input inputMode="numeric" autoComplete="off" value={killsDraft} onChange={(event) => setKillsDraft(event.target.value)} />
+          </label>
+          <button type="button" className="icon-button" aria-label="Save pet progress" title="Save pet progress" onClick={() => {
+            const level = parseStoredNumber(levelDraft)
+            const kills = parseStoredNumber(killsDraft)
+            if (level == null || kills == null) return
+            onSave(pet.id, { level: Math.min(level, 3), kills })
+          }}>
+            <CheckIcon />
+          </button>
+        </div>
+      ) : null}
     </section>
   )
 }
