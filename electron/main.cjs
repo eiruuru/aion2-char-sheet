@@ -235,15 +235,21 @@ app.whenReady().then(async () => {
     autoUpdater.quitAndInstall(false, true)
   })
 
+  const helperPath = path.join(__dirname, "capture", "helper.cjs").replace(
+    `${path.sep}app.asar${path.sep}`,
+    `${path.sep}app.asar.unpacked${path.sep}`,
+  )
   const liveSync = createLiveSession({
     execPath: process.execPath,
-    helperPath: path.join(__dirname, "capture", "helper.cjs"),
+    helperPath,
+    adapterFile: savePath("aion2-live-adapter.json"),
     send: (event) => windowRef?.webContents.send("live-sync:event", event),
   })
   stopLiveSync = () => liveSync.stop()
   ipcMain.handle("live-sync:get", () => liveSync.snapshot())
   ipcMain.handle("live-sync:set", (_event, on) => liveSync.setEnabled(Boolean(on)))
   ipcMain.handle("live-sync:mark", (_event, kind) => liveSync.mark(kind))
+  ipcMain.handle("live-sync:find", () => liveSync.findAdapter())
 })
 
 app.on("before-quit", () => {

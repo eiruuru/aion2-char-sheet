@@ -7,6 +7,7 @@ const PHASE_LABEL: Record<LiveStatus["phase"], string> = {
   capturing: "Live Sync on",
   "needs-npcap": "Npcap missing",
   "needs-relog": "Re-log once",
+  "needs-adapter": "Find Adapter",
   unavailable: "Live Sync unavailable",
 }
 
@@ -19,7 +20,7 @@ export function LiveSyncButton({
   desktop: boolean
   onToggle: () => void
 }) {
-  const on = status.phase === "starting" || status.phase === "capturing" || status.phase === "needs-relog"
+  const on = status.phase === "starting" || status.phase === "capturing" || status.phase === "needs-relog" || status.phase === "needs-adapter"
   const label = desktop ? PHASE_LABEL[status.phase] : "Live Sync"
   return (
     <button
@@ -40,14 +41,17 @@ export function LiveSyncNote({
   characterName,
   desktop,
   onMark,
+  onFindAdapter,
 }: {
   status: LiveStatus
   characterName: string | null
   desktop: boolean
   onMark: (kind: "pet" | "odyle") => void
+  onFindAdapter: () => void
 }) {
   if (!desktop) return <p className="muted live-note">Live Sync runs in the Windows app. Install Npcap, then turn it on there.</p>
-  const watching = status.phase === "capturing" || status.phase === "needs-relog" || status.phase === "starting"
+  const watching = status.phase === "capturing" || status.phase === "needs-relog" || status.phase === "starting" || status.phase === "needs-adapter"
+  const packets = status.phase === "capturing" || status.phase === "needs-relog"
   return (
     <div className="live-note">
       <p className="muted">
@@ -56,8 +60,9 @@ export function LiveSyncNote({
       </p>
       {watching ? (
         <div className="live-marks">
-          <button type="button" onClick={() => onMark("pet")}>Mark pet soul gain</button>
-          <button type="button" onClick={() => onMark("odyle")}>Mark Odyle change</button>
+          <button type="button" onClick={onFindAdapter}>Find Adapter</button>
+          {packets ? <button type="button" onClick={() => onMark("pet")}>Mark pet soul gain</button> : null}
+          {packets ? <button type="button" onClick={() => onMark("odyle")}>Mark Odyle change</button> : null}
         </div>
       ) : null}
     </div>

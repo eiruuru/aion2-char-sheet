@@ -606,6 +606,7 @@ export function App() {
               characterName={selected && selected.id !== SAMPLE_ID ? selected.name : null}
               desktop={Boolean(desktop)}
               onMark={(kind) => { void desktop?.markLiveSync(kind) }}
+              onFindAdapter={() => { void desktop?.findAdapter() }}
             />
           )}
         />

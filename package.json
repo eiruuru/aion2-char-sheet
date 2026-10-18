@@ -1,7 +1,7 @@
 {
   "name": "aion2-tracker",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Local Aion 2 character sheet. Public profiles supply gear, skills, and Daevanion. Dailies, goals, and the Odyle clock stay on this device.",
   "type": "module",
   "main": "electron/main.cjs",
@@ -18,6 +18,7 @@
     "url": "https://github.com/eiruuru/aion2-char-sheet.git"
   },
   "dependencies": {
+    "cap": "^0.2.1",
     "electron-updater": "^6.8.9",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
@@ -51,12 +52,17 @@
       }
     ],
     "asar": true,
+    "npmRebuild": true,
+    "asarUnpack": [
+      "electron/capture/**",
+      "**/node_modules/cap/**"
+    ],
     "electronLanguages": [
       "en-US"
     ],
     "afterPack": "electron/after-pack.cjs",
     "releaseInfo": {
-      "releaseNotes": "Pet progress sits beside Odyle: level, souls, and souls to the next level. Optional Live Sync on Windows can fill those from your own game traffic after Npcap is installed. Manual entry still works."
+      "releaseNotes": "Live Sync now includes the capture binding. Find Adapter listens while you move or attack and keeps the network device that sees game packets. Mark a pet soul gain or an Odyle change twice after packets arrive."
     },
     "publish": {
       "provider": "github",

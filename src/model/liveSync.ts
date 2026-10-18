@@ -3,7 +3,7 @@ import { normalizePetProgress, type PetProgress } from "./petProgress"
 
 export const LIVE_SYNC_EXPERIMENTAL = true
 
-export type LivePhase = "off" | "starting" | "capturing" | "needs-npcap" | "needs-relog" | "unavailable"
+export type LivePhase = "off" | "starting" | "capturing" | "needs-npcap" | "needs-relog" | "needs-adapter" | "unavailable"
 
 export type LiveStatus = {
   phase: LivePhase

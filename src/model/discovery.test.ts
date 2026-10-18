@@ -9,6 +9,7 @@ const decode = require("../../electron/capture/decode.cjs") as {
   applyConfirmed: (layout: Record<string, unknown>, kind: string, field: { offset: number; width: number } | null) => { odyle?: { offset: number; width: number }; petSouls?: { offset: number; width: number } }
   decodePacket: (buf: Buffer, layout: { odyle?: { offset: number; width: number }; petSouls?: { offset: number; width: number } }) => { odyle?: number; souls?: number }
   createRing: () => { push: (buf: Buffer, at: number) => void; pair: () => { before: { bytes: Buffer }; after: { bytes: Buffer } } | null }
+  pickAdapter: (rows: { name?: string; description?: string; udp?: number }[]) => { name: string; udp: number } | null
 }
 
 function packet(odyle: number, souls: number): Buffer {
@@ -51,5 +52,14 @@ describe("packet discovery", () => {
     ring.push(before, 1)
     ring.push(after, 2)
     expect(ring.pair()?.after.bytes.readUInt16LE(10)).toBe(13)
+  })
+
+  it("keeps the adapter that saw the most UDP payloads", () => {
+    expect(decode.pickAdapter([
+      { name: "wifi", udp: 2 },
+      { name: "ethernet", description: "Realtek", udp: 40 },
+      { name: "loopback", udp: 0 },
+    ])).toEqual({ name: "ethernet", description: "Realtek", udp: 40 })
+    expect(decode.pickAdapter([{ name: "idle", udp: 0 }])).toBeNull()
   })
 })

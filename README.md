@@ -12,7 +12,7 @@ Checklist marks, banks, and goals stay on this device. The sheet does not log in
 
 The Windows app can optionally watch your own game traffic with [Npcap](https://npcap.com/). Turn Live Sync on before you log in, then teleport or re-log once. Readings apply only to the character selected on the sheet.
 
-Install Npcap yourself. If it is missing, the button stays on “Npcap missing” and Odyle plus pet souls stay manual. This build does not ship a packet decoder. After a pet soul gain or an Odyle change, use “Mark pet soul gain” or “Mark Odyle change”. The same change twice locks that field for later packets. Live Sync does not modify the client, send game commands, or replace the public-profile refresh. Checklist marks stay local.
+Install Npcap yourself. If it is missing, the button stays on “Npcap missing” and Odyle plus pet souls stay manual. Turn Live Sync on, enter the game, and run Find Adapter while you move or attack so the sheet listens on the adapter that sees game packets. Another listener such as NotMeter can stay open. After packets arrive, a pet soul gain or an Odyle change can be marked twice to lock that field. Live Sync does not modify the client, send game commands, or replace the public-profile refresh. Checklist marks stay local.
 
 The first launch walks through the roster, tools, profile, tasks, and goals. With an empty roster that tour uses an example character, and the example is not saved. Clearing the roster starts the tour again.
 

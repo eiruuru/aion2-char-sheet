@@ -97,6 +97,18 @@ function decodePacket(buf, layout) {
   return found
 }
 
+function pickAdapter(rows) {
+  let best = null
+  for (const row of rows || []) {
+    const udp = Number(row && row.udp) || 0
+    if (!row || typeof row.name !== "string" || !row.name || udp <= 0) continue
+    if (!best || udp > best.udp) {
+      best = { name: row.name, description: typeof row.description === "string" ? row.description : "", udp }
+    }
+  }
+  return best
+}
+
 function createRing() {
   const samples = []
   return {
@@ -125,4 +137,5 @@ module.exports = {
   applyConfirmed,
   decodePacket,
   createRing,
+  pickAdapter,
 }

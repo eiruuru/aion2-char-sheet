@@ -1,7 +1,23 @@
 const { spawn } = require("child_process")
+const fs = require("fs")
+const path = require("path")
 const { npcapPresent } = require("./decode.cjs")
 
-function createLiveSession({ execPath, helperPath, send }) {
+function readDevice(file) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8"))
+    return typeof parsed.device === "string" ? parsed.device : ""
+  } catch {
+    return ""
+  }
+}
+
+function writeDevice(file, device) {
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, JSON.stringify({ device }))
+}
+
+function createLiveSession({ execPath, helperPath, adapterFile, send }) {
   let child = null
   let phase = "off"
   let detail = ""
@@ -46,7 +62,11 @@ function createLiveSession({ execPath, helperPath, send }) {
       for (const line of lines) {
         if (!line.trim()) continue
         try {
-          sendEvent(JSON.parse(line))
+          const event = JSON.parse(line)
+          if (adapterFile && event?.type === "adapter" && typeof event.device === "string" && event.device) {
+            writeDevice(adapterFile, event.device)
+          }
+          sendEvent(event)
         } catch {
           // ignore a broken helper line
         }
@@ -58,7 +78,7 @@ function createLiveSession({ execPath, helperPath, send }) {
         closing = false
         return
       }
-      if (phase === "starting" || phase === "capturing" || phase === "needs-relog") {
+      if (phase === "starting" || phase === "capturing" || phase === "needs-relog" || phase === "needs-adapter") {
         sendEvent({ type: "status", phase: "unavailable", detail: "Live Sync stopped.", boundName: "" })
       }
     })
@@ -66,7 +86,7 @@ function createLiveSession({ execPath, helperPath, send }) {
       child = null
       sendEvent({ type: "status", phase: "unavailable", detail: "Could not start Live Sync.", boundName: "" })
     })
-    next.stdin.write(`${JSON.stringify({ cmd: "start" })}\n`)
+    next.stdin.write(`${JSON.stringify({ cmd: "start", device: adapterFile ? readDevice(adapterFile) : "" })}\n`)
   }
 
   return {
@@ -94,6 +114,20 @@ function createLiveSession({ execPath, helperPath, send }) {
     mark(kind) {
       if (!child) return false
       child.stdin.write(`${JSON.stringify({ cmd: "mark", kind: kind === "odyle" ? "odyle" : "pet" })}\n`)
+      return true
+    },
+    findAdapter() {
+      if (!npcapPresent()) {
+        sendEvent({
+          type: "status",
+          phase: "needs-npcap",
+          detail: "Install Npcap, then turn Live Sync on again.",
+          boundName: "",
+        })
+        return false
+      }
+      if (!child) startChild()
+      child?.stdin.write(`${JSON.stringify({ cmd: "find" })}\n`)
       return true
     },
     stop() {

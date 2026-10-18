@@ -7,7 +7,11 @@ const {
   applyConfirmed,
   decodePacket,
   createRing,
+  pickAdapter,
 } = require("./decode.cjs")
+
+const SNIFF_MS = 2500
+const NOT_DETECTED = "Game packets have not been detected yet. Move or attack, then run Find Adapter."
 
 const hits = {}
 let layout = emptyLayout()
@@ -15,6 +19,8 @@ let ring = createRing()
 let capturing = false
 let capHandle = null
 let sawDecode = false
+let sawPackets = false
+let capModule = null
 
 function emit(event) {
   process.stdout.write(`${JSON.stringify(event)}\n`)
@@ -25,11 +31,45 @@ function status(phase, detail) {
 }
 
 function loadCap() {
+  if (capModule) return capModule
   try {
-    return require("cap")
+    capModule = require("cap")
   } catch {
-    return null
+    capModule = null
   }
+  return capModule
+}
+
+function closeHandle() {
+  try {
+    capHandle?.close()
+  } catch {
+    // already closed
+  }
+  capHandle = null
+}
+
+function countUdp(cap, device, ms) {
+  return new Promise((resolve) => {
+    const handle = new cap.Cap()
+    const buffer = Buffer.alloc(65535)
+    let udp = 0
+    try {
+      handle.open(device, "udp", 10 * 1024 * 1024, buffer)
+      if (handle.setMinBytes) handle.setMinBytes(0)
+      handle.on("packet", (nbytes) => {
+        const payload = payloadFromPacket(cap, buffer, nbytes)
+        if (payload && payload.length >= 8) udp += 1
+      })
+    } catch {
+      resolve(0)
+      return
+    }
+    setTimeout(() => {
+      try { handle.close() } catch { /* already closed */ }
+      resolve(udp)
+    }, ms)
+  })
 }
 
 function payloadFromPacket(cap, buffer, nbytes) {
@@ -72,55 +112,85 @@ function noteSample(bytes) {
   }
 }
 
-function startCapture() {
-  if (capturing) return
-  capturing = true
-  sawDecode = false
+function bindingReady() {
   if (!npcapPresent()) {
     status("needs-npcap", "Install Npcap, then turn Live Sync on again.")
-    capturing = false
-    return
+    return null
   }
   const cap = loadCap()
   if (!cap?.Cap) {
     status("unavailable", "Npcap is installed. This build has no capture binding yet, so readings stay manual.")
+    return null
+  }
+  return cap
+}
+
+function startCapture(deviceName) {
+  closeHandle()
+  sawDecode = false
+  sawPackets = false
+  const cap = bindingReady()
+  if (!cap) {
     capturing = false
     return
   }
+  const device = typeof deviceName === "string" ? deviceName : ""
+  if (!device) {
+    capturing = true
+    status("needs-adapter", NOT_DETECTED)
+    return
+  }
   try {
-    const device = cap.Cap.findDevice()
-    if (!device) {
-      status("unavailable", "Npcap did not list a network device.")
-      capturing = false
-      return
-    }
     const handle = new cap.Cap()
     const buffer = Buffer.alloc(65535)
-    handle.open(device, "ip", 10 * 1024 * 1024, buffer)
-    handle.setMinBytes && handle.setMinBytes(0)
+    status("needs-adapter", NOT_DETECTED)
+    handle.open(device, "udp", 10 * 1024 * 1024, buffer)
+    if (handle.setMinBytes) handle.setMinBytes(0)
     handle.on("packet", (nbytes) => {
       const payload = payloadFromPacket(cap, buffer, nbytes)
       if (!payload || payload.length < 8) return
+      if (!sawPackets) {
+        sawPackets = true
+        status("needs-relog", "Packets are arriving. Re-log or teleport once, then mark a pet soul gain or an Odyle change.")
+      }
       const before = sawDecode
       noteSample(Buffer.from(payload))
       if (!before && sawDecode) status("capturing", "Live readings are updating the selected character.")
     })
     capHandle = handle
-    status("needs-relog", "Capturing. Re-log or teleport once so the next reading binds to the selected character.")
+    capturing = true
   } catch (error) {
-    status("unavailable", error instanceof Error ? error.message : "Could not open Npcap.")
     capturing = false
+    const message = error instanceof Error ? error.message : "Could not open Npcap."
+    status("unavailable", `${message} Start this app the same way you start NotMeter.`)
   }
+}
+
+async function findAdapter() {
+  const cap = bindingReady()
+  if (!cap) return
+  closeHandle()
+  status("starting", "Finding the adapter. Keep moving or attacking.")
+  const devices = cap.Cap.deviceList?.() || []
+  const rows = []
+  for (const device of devices) {
+    if (!device?.name) continue
+    const udp = await countUdp(cap, device.name, SNIFF_MS)
+    rows.push({ name: device.name, description: device.description || "", udp })
+  }
+  const best = pickAdapter(rows)
+  if (!best) {
+    emit({ type: "adapter", device: "", description: "", udp: 0 })
+    status("needs-adapter", NOT_DETECTED)
+    return
+  }
+  emit({ type: "adapter", device: best.name, description: best.description, udp: best.udp })
+  startCapture(best.name)
 }
 
 function stopCapture() {
   capturing = false
-  try {
-    capHandle?.close()
-  } catch {
-    // already closed
-  }
-  capHandle = null
+  closeHandle()
   status("off", "")
 }
 
@@ -161,7 +231,8 @@ function onCommand(line) {
   } catch {
     return
   }
-  if (command.cmd === "start") startCapture()
+  if (command.cmd === "start") startCapture(command.device)
+  if (command.cmd === "find") void findAdapter()
   if (command.cmd === "stop") stopCapture()
   if (command.cmd === "mark") mark(command.kind === "odyle" ? "odyle" : "pet")
   if (command.cmd === "layout" && command.layout && typeof command.layout === "object") {

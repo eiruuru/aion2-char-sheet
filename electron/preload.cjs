@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld("tracker", {
   getLiveSync: () => ipcRenderer.invoke("live-sync:get"),
   setLiveSync: (on) => ipcRenderer.invoke("live-sync:set", on),
   markLiveSync: (kind) => ipcRenderer.invoke("live-sync:mark", kind),
+  findAdapter: () => ipcRenderer.invoke("live-sync:find"),
   onLiveEvent: (callback) => {
     const listener = (_event, payload) => callback(payload)
     ipcRenderer.on("live-sync:event", listener)

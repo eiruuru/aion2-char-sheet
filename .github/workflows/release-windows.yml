@@ -18,6 +18,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # cap 0.2.1 vendors the WinPcap import libraries it links. The installed
+      # Npcap driver supplies wpcap.dll when the app runs, so the workflow
+      # does not download a second SDK.
+      - name: Require the capture binding
+        shell: pwsh
+        run: |
+          if (-not (Test-Path node_modules/cap/build/Release/cap.node)) { throw "cap binding was not built" }
       - run: npm run build
       - run: npx electron-builder --win nsis --x64 --publish always
         env:
