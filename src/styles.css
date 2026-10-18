@@ -191,6 +191,35 @@ button.quiet { background: transparent; color: var(--text); border: 1px solid va
   box-sizing: border-box;
 }
 .odyle-card { display: grid; gap: 0.7rem; flex: none; }
+.live-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2.35rem;
+  padding: 0 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.live-sync.on { color: var(--text); border-color: var(--accent); }
+.live-sync span {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.live-note { margin: 0; display: grid; gap: 0.45rem; }
+.live-marks { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.live-marks button {
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.78rem;
+}
 .goal-group h3 { margin: 0 0 0.15rem; font-size: 1rem; }
 .goal-group + .goal-group { margin-top: 1.35rem; }
 .goal-kind { margin-top: 1.05rem; }
@@ -222,6 +251,8 @@ button.group-toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
 .odyle-controls label:first-child { flex: 1 1 7.5rem; min-width: 0; }
 .odyle-controls label:not(:first-child) { flex: 0 0 3.5rem; }
 .odyle-controls .icon-button { flex: none; }
+.pet-controls label,
+.pet-controls label:not(:first-child) { flex: 1 1 4.2rem; }
 .odyle-controls .timer-input { width: 100%; }
 .icon-button {
   width: 2.35rem;

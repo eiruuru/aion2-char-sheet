@@ -1,7 +1,7 @@
 {
   "name": "aion2-tracker",
   "private": true,
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Local Aion 2 character sheet. Public profiles supply gear, skills, and Daevanion. Dailies, goals, and the Odyle clock stay on this device.",
   "type": "module",
   "main": "electron/main.cjs",
@@ -56,7 +56,7 @@
     ],
     "afterPack": "electron/after-pack.cjs",
     "releaseInfo": {
-      "releaseNotes": "Removes leftover Advice and vault-guide code after that tab was dropped. The Goals list, checklist, and YouTube guide tabs are unchanged."
+      "releaseNotes": "Pet progress sits beside Odyle: level, souls, and souls to the next level. Optional Live Sync on Windows can fill those from your own game traffic after Npcap is installed. Manual entry still works."
     },
     "publish": {
       "provider": "github",

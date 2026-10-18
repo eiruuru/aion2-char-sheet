@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import type { CharacterRecord } from "../model/store"
 import { parseStoredNumber } from "../model/store"
+import { petFill, type PetProgress } from "../model/petProgress"
 import { formatCountdown, formatNumber } from "../model/format"
 import { CUBE_COST, type OdyleProjection } from "../model/odyle"
 import { rosterGoals, type SessionItem } from "../model/checklist"
@@ -16,6 +17,8 @@ export function GoalsPanel({
   onSaveOdyle,
   onSetOdyleTimer,
   onSpendCube,
+  onSavePet,
+  liveNote,
 }: {
   character: CharacterRecord | null
   projection: OdyleProjection | null
@@ -25,6 +28,8 @@ export function GoalsPanel({
   onSaveOdyle: (amount: number) => void
   onSetOdyleTimer: (remainingMs: number) => void
   onSpendCube: () => void
+  onSavePet: (progress: PetProgress) => void
+  liveNote: ReactNode
 }) {
   const [tab, setTab] = useState<"goals" | "class" | "general">("goals")
   const goals = rosterGoals(due, character?.id ?? null, projection, now)
@@ -40,6 +45,8 @@ export function GoalsPanel({
           onSpendCube={onSpendCube}
         />
       ) : null}
+      {liveNote}
+      {character ? <PetCard character={character} onSave={onSavePet} /> : null}
       <section className="goals panel">
         <div className="tabs" role="tablist" aria-label="Goals">
           <button type="button" role="tab" aria-selected={tab === "goals"} onClick={() => setTab("goals")}>Goals</button>
@@ -213,6 +220,70 @@ function OdyleCard({
         </button>
         <button type="button" className="icon-button" aria-label={`Opened a cube, minus ${CUBE_COST}`} title={`Opened a cube (−${CUBE_COST})`} disabled={!projection} onClick={onSpendCube}>
           <CubeIcon />
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function PetCard({ character, onSave }: { character: CharacterRecord; onSave: (progress: PetProgress) => void }) {
+  const progress = character.petProgress ?? null
+  const profile = character.latest?.pet
+  const [levelDraft, setLevelDraft] = useState(progress ? String(progress.level) : profile?.level != null ? String(profile.level) : "")
+  const [soulsDraft, setSoulsDraft] = useState(progress ? String(progress.souls) : "")
+  const [nextDraft, setNextDraft] = useState(progress?.soulsToNext != null ? String(progress.soulsToNext) : "")
+  useEffect(() => {
+    setLevelDraft(progress ? String(progress.level) : profile?.level != null ? String(profile.level) : "")
+    setSoulsDraft(progress ? String(progress.souls) : "")
+    setNextDraft(progress?.soulsToNext != null ? String(progress.soulsToNext) : "")
+  }, [character.id, progress?.updatedAt, progress?.level, progress?.souls, progress?.soulsToNext, profile?.level])
+  const fill = progress ? petFill(progress) : 0
+  const title = progress?.name || profile?.name || "Pet"
+  return (
+    <section className="panel odyle-card">
+      <h2>Pet progress</h2>
+      <p className="odyle-readout">
+        <strong>{title}</strong>
+        {progress ? ` · Lv ${progress.level}` : profile?.level != null ? ` · profile Lv ${profile.level}` : null}
+        {progress?.source === "live" ? " · live" : null}
+      </p>
+      {progress && progress.soulsToNext ? (
+        <>
+          <div className="meter" role="meter" aria-valuemin={0} aria-valuemax={progress.soulsToNext} aria-valuenow={Math.min(progress.souls, progress.soulsToNext)} aria-label="Pet souls">
+            <span style={{ width: `${fill * 100}%` }} />
+          </div>
+          <p className="odyle-readout">{progress.souls} / {progress.soulsToNext} souls</p>
+        </>
+      ) : progress ? <p className="muted">{progress.souls} souls. Next level total is not set.</p> : <p className="muted">No soul count yet.</p>}
+      <div className="odyle-controls pet-controls">
+        <label>
+          Level
+          <input className="timer-input" inputMode="numeric" autoComplete="off" value={levelDraft} onChange={(event) => setLevelDraft(event.target.value)} />
+        </label>
+        <label>
+          Souls
+          <input inputMode="numeric" autoComplete="off" value={soulsDraft} onChange={(event) => setSoulsDraft(event.target.value)} />
+        </label>
+        <label>
+          Next
+          <input className="timer-input" inputMode="numeric" autoComplete="off" value={nextDraft} onChange={(event) => setNextDraft(event.target.value)} />
+        </label>
+        <button type="button" className="icon-button" aria-label="Save pet progress" title="Save pet progress" onClick={() => {
+          const level = parseStoredNumber(levelDraft)
+          const souls = parseStoredNumber(soulsDraft)
+          if (level == null || souls == null) return
+          const soulsToNext = nextDraft.trim() ? parseStoredNumber(nextDraft) : null
+          if (nextDraft.trim() && soulsToNext == null) return
+          onSave({
+            name: progress?.name || profile?.name,
+            level,
+            souls,
+            soulsToNext,
+            source: "manual",
+            updatedAt: new Date().toISOString(),
+          })
+        }}>
+          <CheckIcon />
         </button>
       </div>
     </section>

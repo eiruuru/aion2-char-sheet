@@ -1,3 +1,4 @@
+import type { LiveEvent, LiveStatus } from "./model/liveSync"
 import type { UpdateStatus } from "./model/updates"
 
 const STORAGE_KEY = "aion2-tracker-v1"
@@ -15,6 +16,10 @@ type TrackerBridge = {
   downloadUpdate: () => Promise<void>
   installUpdate: () => Promise<void>
   onUpdate: (callback: (status: UpdateStatus) => void) => () => void
+  getLiveSync: () => Promise<LiveStatus & { npcap: boolean }>
+  setLiveSync: (on: boolean) => Promise<LiveStatus & { npcap: boolean }>
+  markLiveSync: (kind: "pet" | "odyle") => Promise<boolean>
+  onLiveEvent: (callback: (event: LiveEvent) => void) => () => void
 }
 
 declare global {

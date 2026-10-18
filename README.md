@@ -4,9 +4,15 @@ A local sheet for an Aion 2 roster. Search a public profile, pin a main and the 
 
 The public character page supplies the portrait, class, faction, level, title, gear score, combat power, equipment, skills, Daevanion boards, and cosmetics. Gear names use the same grade colors as the game. A visible roster refreshes about every 20 minutes, one character at a time.
 
-You type the Odyle reading. The sheet then adds 15 every 3 hours and stops at the cap: 560, or 840 with Special Quai Membership. Opening a cube subtracts 40. Goals ranks what is due.
+You type the Odyle reading. The sheet then adds 15 every 3 hours and stops at the cap: 560, or 840 with Special Quai Membership. Opening a cube subtracts 40. Goals ranks what is due. Pet souls and the next-level total can be typed on the same side of the sheet.
 
 Checklist marks, banks, and goals stay on this device. The sheet does not log into Aion 2, change a character, or mark a task in the game. It does not attach to the client, read game memory, or ask for a PlayNC password. Refresh only reads the public profile. Export is the backup.
+
+## Live Sync (Windows, experimental)
+
+The Windows app can optionally watch your own game traffic with [Npcap](https://npcap.com/). Turn Live Sync on before you log in, then teleport or re-log once. Readings apply only to the character selected on the sheet.
+
+Install Npcap yourself. If it is missing, the button stays on “Npcap missing” and Odyle plus pet souls stay manual. This build does not ship a packet decoder. After a pet soul gain or an Odyle change, use “Mark pet soul gain” or “Mark Odyle change”. The same change twice locks that field for later packets. Live Sync does not modify the client, send game commands, or replace the public-profile refresh. Checklist marks stay local.
 
 The first launch walks through the roster, tools, profile, tasks, and goals. With an empty roster that tour uses an example character, and the example is not saved. Clearing the roster starts the tour again.
 

@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, Notification } = require("electron")
+const { createLiveSession } = require("./capture/session.cjs")
 
 if (app.isPackaged) app.setName("Aion 2 Progress")
 const fs = require("fs")
@@ -127,6 +128,7 @@ function startServer(root) {
 }
 
 let windowRef = null
+let stopLiveSync = () => {}
 
 function createWindow(port) {
   let above = false
@@ -232,6 +234,24 @@ app.whenReady().then(async () => {
     if (!autoUpdater) return
     autoUpdater.quitAndInstall(false, true)
   })
+
+  const liveSync = createLiveSession({
+    execPath: process.execPath,
+    helperPath: path.join(__dirname, "capture", "helper.cjs"),
+    send: (event) => windowRef?.webContents.send("live-sync:event", event),
+  })
+  stopLiveSync = () => liveSync.stop()
+  ipcMain.handle("live-sync:get", () => liveSync.snapshot())
+  ipcMain.handle("live-sync:set", (_event, on) => liveSync.setEnabled(Boolean(on)))
+  ipcMain.handle("live-sync:mark", (_event, kind) => liveSync.mark(kind))
+})
+
+app.on("before-quit", () => {
+  try {
+    stopLiveSync()
+  } catch {
+    // helper already stopped
+  }
 })
 
 app.on("window-all-closed", () => {

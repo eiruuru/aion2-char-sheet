@@ -28,10 +28,13 @@ import { factionName } from "./api/serverList"
 import { rosterOrder } from "./model/suggestions"
 import { CUBE_COST, odyleCap, projectOdyle, shiftOdyleClock, spendOdyleReading, type OdyleProjection } from "./model/odyle"
 import { desktopBridge } from "./desktop"
+import { applyLiveEvent, emptyLiveStatus, type LiveStatus } from "./model/liveSync"
+import type { PetProgress } from "./model/petProgress"
 import { APP_VERSION, reduceUpdateStatus, UPDATE_SKIP_KEY, WINDOW_TITLE, type UpdateOffer } from "./model/updates"
 import { AddCharacter } from "./ui/AddCharacter"
 import { CharacterPanel } from "./ui/CharacterPanel"
 import { GoalsPanel } from "./ui/Goals"
+import { LiveSyncButton, LiveSyncNote } from "./ui/LiveSync"
 import { ExportIcon, ImportIcon, MembershipIcon, PinIcon, TrashIcon, UpdateIcon } from "./ui/icons"
 import { Onboarding } from "./ui/Onboarding"
 import { SAMPLE_ID, charactersForTour, sampleProgress } from "./ui/sampleSheet"
@@ -60,6 +63,8 @@ export function App() {
   const [updateOffer, setUpdateOffer] = useState<UpdateOffer | null>(null)
   const [updateNotice, setUpdateNotice] = useState("")
   const desktop = desktopBridge()
+  const [liveStatus, setLiveStatus] = useState<LiveStatus>(() => emptyLiveStatus())
+  const selectedLiveRef = useRef<string | null>(null)
   const updateAsked = useRef(false)
   const updateOfferRef = useRef<UpdateOffer | null>(null)
   const storeRef = useRef(store)
@@ -122,6 +127,38 @@ export function App() {
     [shownCharacters, store.membership, now],
   )
   const selected = ordered.find((character) => character.id === chooseCharacter(selectedId, ordered.map((character) => character.id))) ?? null
+  selectedLiveRef.current = selected && selected.id !== SAMPLE_ID ? selected.id : null
+
+  useEffect(() => {
+    if (!desktop?.onLiveEvent) return
+    void desktop.getLiveSync().then((status) => {
+      setLiveStatus({
+        phase: status.phase,
+        detail: status.detail,
+        boundName: status.boundName,
+        experimental: status.experimental,
+      })
+    })
+    return desktop.onLiveEvent((event) => {
+      if (event.type === "status") {
+        setLiveStatus((current) => ({
+          phase: event.phase,
+          detail: event.detail ?? "",
+          boundName: event.boundName || (selectedLiveRef.current ? current.boundName : ""),
+          experimental: current.experimental,
+        }))
+        return
+      }
+      if (event.type === "discovery") {
+        setLiveStatus((current) => ({ ...current, detail: event.note }))
+        return
+      }
+      const id = selectedLiveRef.current
+      if (!id) return
+      setStore((current) => applyLiveEvent(current, id, event))
+      setNow(Date.now())
+    })
+  }, [desktop])
 
   useEffect(() => {
     if (previewing || !selected || selected.id === SAMPLE_ID) return
@@ -219,6 +256,7 @@ export function App() {
       role: store.characters.some((character) => character.role === "main") ? "alt" : "main",
       addedAt: new Date().toISOString(),
       odyle: null,
+      petProgress: null,
       resources: { crystals: null, kinah: null, abyss: null },
       latest: null,
       history: [],
@@ -238,6 +276,10 @@ export function App() {
         character.id === selected.id ? patch(character) : character
       )),
     }))
+  }
+
+  function savePet(progress: PetProgress) {
+    updateSelected((character) => ({ ...character, petProgress: progress }))
   }
 
   function saveOdyle(amount: number) {
@@ -384,6 +426,25 @@ export function App() {
         </div>
         <div className="actions">
           <span className="app-version">v{APP_VERSION}</span>
+          <LiveSyncButton
+            status={{ ...liveStatus, boundName: selected && selected.id !== SAMPLE_ID ? selected.name : "" }}
+            desktop={Boolean(desktop)}
+            onToggle={() => {
+              if (!desktop) {
+                setUpdateNotice("Live Sync runs inside the Windows app.")
+                return
+              }
+              const on = liveStatus.phase === "off" || liveStatus.phase === "needs-npcap" || liveStatus.phase === "unavailable"
+              void desktop.setLiveSync(on).then((status) => {
+                setLiveStatus({
+                  phase: status.phase,
+                  detail: status.detail,
+                  boundName: selected && selected.id !== SAMPLE_ID ? selected.name : "",
+                  experimental: status.experimental,
+                })
+              })
+            }}
+          />
           <button type="button" className="icon-button ghost" aria-label="Check for updates" title="Check for updates" onClick={() => {
             updateAsked.current = true
             setUpdateNotice("")
@@ -538,6 +599,15 @@ export function App() {
           onSaveOdyle={saveOdyle}
           onSetOdyleTimer={setOdyleTimer}
           onSpendCube={spendCube}
+          onSavePet={savePet}
+          liveNote={(
+            <LiveSyncNote
+              status={liveStatus}
+              characterName={selected && selected.id !== SAMPLE_ID ? selected.name : null}
+              desktop={Boolean(desktop)}
+              onMark={(kind) => { void desktop?.markLiveSync(kind) }}
+            />
+          )}
         />
       </div>
       {tourOpen ? (

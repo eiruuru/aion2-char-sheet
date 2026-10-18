@@ -1,6 +1,7 @@
 import type { RegionId } from "../api/types"
 import { emptyProgress, migrateSharedKeys, syncProgress, type ChecklistProgress } from "./checklist"
 import type { OdyleReading } from "./odyle"
+import { normalizePetProgress, type PetProgress } from "./petProgress"
 import { historySnapshot, type Snapshot } from "./snapshot"
 
 export type Resources = {
@@ -23,6 +24,7 @@ export type CharacterRecord = {
   role: CharacterRole
   addedAt: string
   odyle: OdyleReading | null
+  petProgress?: PetProgress | null
   resources: Resources
   latest: Snapshot | null
   history: Snapshot[]
@@ -49,7 +51,10 @@ export function normalizeStore(store: StoreData, now = Date.now()): StoreData {
   return {
     version: 1,
     membership: Boolean(store.membership),
-    characters: store.characters,
+    characters: store.characters.map((character) => ({
+      ...character,
+      petProgress: normalizePetProgress(character.petProgress),
+    })),
     checklist: migrateSharedKeys(syncProgress(store.checklist ?? emptyProgress(now), now), store.characters),
     selectedId: typeof store.selectedId === "string" && store.selectedId ? store.selectedId : undefined,
   }
