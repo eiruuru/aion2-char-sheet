@@ -19,17 +19,6 @@ function ncProxy(prefix: string, target: string): ProxyOptions {
 const proxy = {
   "/nc-search": ncProxy("/nc-search", "https://api-search.plaync.com"),
   "/nc-aion": ncProxy("/nc-aion", "https://aion2.plaync.com"),
-  "/guide-vault": {
-    target: "https://aion2vault.com",
-    changeOrigin: true,
-    rewrite: (path) => path.replace(/^\/guide-vault/, ""),
-    configure: (guideProxy) => {
-      guideProxy.on("proxyReq", (proxyReq) => {
-        proxyReq.setHeader("Accept", "text/html")
-        proxyReq.setHeader("User-Agent", "Mozilla/5.0 (compatible; Aion2Progress/0.3)")
-      })
-    },
-  } satisfies ProxyOptions,
   "/youtube": {
     target: "https://www.youtube.com",
     changeOrigin: true,

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 import {
-  characterGoals,
   emptyProgress,
   listClock,
   rowsForCharacter,
@@ -383,44 +382,5 @@ describe("today list", () => {
     expect(soon).toEqual([expect.objectContaining({ taskName: "Odyle", due: "Caps in 6h", detail: "Spend it before regen stops." })])
     const later = rosterGoals([], "alt", { full: false, aboveCap: false, fullAt: FAR_FROM_RESET + 5 * 24 * 60 * 60 * 1000 }, FAR_FROM_RESET)
     expect(later).toEqual([])
-  })
-})
-
-describe("goals", () => {
-  const main = character({ id: "main", name: "Nairen", role: "main", itemLevel: 1700 })
-  const names = (lines: { title: string }[]) => lines.map((line) => line.title)
-
-  it("keeps unfinished dailies on Today and weeklies for later when Wednesday is days away", () => {
-    const rows = rowsForCharacter(main, [main], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET)
-    const goals = characterGoals(rows, FAR_FROM_RESET, null)
-    expect(names(goals.today)).toContain("Open world Qina")
-    expect(names(goals.today)).not.toContain("Ascension Trial")
-    expect(names(goals.later)).toContain("Ascension Trial")
-    expect(names(goals.later)).toContain("Shop weekly limited items")
-    const duty = names(goals.today).indexOf("Duty Missions")
-    const qina = names(goals.today).indexOf("Open world Qina")
-    expect(duty).toBeGreaterThanOrEqual(0)
-    expect(qina).toBeGreaterThan(duty)
-  })
-
-  it("moves a weekly onto Today inside two days of Wednesday", () => {
-    const rows = rowsForCharacter(main, [main], emptyProgress(TUE_BURN), false, TUE_BURN)
-    const goals = characterGoals(rows, TUE_BURN, null)
-    expect(names(goals.today)).toContain("Ascension Trial")
-  })
-
-  it("hides a token task with an empty bank and keeps one whose bank was never set", () => {
-    const emptyBank = setTaskBank(emptyProgress(FAR_FROM_RESET), "nightmare", main, 0, false, FAR_FROM_RESET)
-    const hidden = characterGoals(rowsForCharacter(main, [main], emptyBank, false, FAR_FROM_RESET), FAR_FROM_RESET, null)
-    expect(names([...hidden.today, ...hidden.later])).not.toContain("Nightmare")
-    const unset = characterGoals(rowsForCharacter(main, [main], emptyProgress(FAR_FROM_RESET), false, FAR_FROM_RESET), FAR_FROM_RESET, null)
-    expect(names([...unset.today, ...unset.later])).toContain("Nightmare")
-  })
-
-  it("puts Odyle on Today when it caps inside 24 hours and leaves it off when the cap is days away", () => {
-    const soon = characterGoals([], FAR_FROM_RESET, { full: false, aboveCap: false, fullAt: FAR_FROM_RESET + 24 * 60 * 60 * 1000 })
-    expect(names(soon.today)).toContain("Odyle energy")
-    const later = characterGoals([], FAR_FROM_RESET, { full: false, aboveCap: false, fullAt: FAR_FROM_RESET + 5 * 24 * 60 * 60 * 1000 })
-    expect(names([...later.today, ...later.later])).not.toContain("Odyle energy")
   })
 })

@@ -86,13 +86,6 @@ function startServer(root) {
       proxy(req, res, "https://aion2.plaync.com", "/nc-aion")
       return
     }
-    if (incoming.pathname.startsWith("/guide-vault")) {
-      proxy(req, res, "https://aion2vault.com", "/guide-vault", {
-        accept: "text/html,application/xhtml+xml",
-        "user-agent": "Mozilla/5.0 (compatible; Aion2Progress/0.3)",
-      })
-      return
-    }
     if (incoming.pathname.startsWith("/youtube")) {
       proxy(req, res, "https://www.youtube.com", "/youtube", {
         accept: "text/html",

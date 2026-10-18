@@ -1,7 +1,7 @@
 {
   "name": "aion2-tracker",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Local Aion 2 character sheet. Public profiles supply gear, skills, and Daevanion. Dailies, goals, and the Odyle clock stay on this device.",
   "type": "module",
   "main": "electron/main.cjs",
@@ -56,7 +56,7 @@
     ],
     "afterPack": "electron/after-pack.cjs",
     "releaseInfo": {
-      "releaseNotes": "Goals is one priority list, with a countdown and a short note for each task. Abyss Farming asks for an hour a day. Portrait badges match that list. The Advice tab is gone. The header lines the portrait up with the scores and the mount cards."
+      "releaseNotes": "Removes leftover Advice and vault-guide code after that tab was dropped. The Goals list, checklist, and YouTube guide tabs are unchanged."
     },
     "publish": {
       "provider": "github",
