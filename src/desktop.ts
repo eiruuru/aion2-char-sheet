@@ -21,6 +21,15 @@ type TrackerBridge = {
   setLiveRoster: (names: string[]) => Promise<void>
   findAdapter: () => Promise<boolean>
   onLiveEvent: (callback: (event: LiveEvent) => void) => () => void
+  openPetPopup: () => Promise<boolean>
+  togglePetPopup: () => Promise<boolean>
+  onPetVisible: (callback: (open: boolean) => void) => () => void
+  closePetPopup: () => Promise<void>
+  publishPetPopup: (state: unknown) => void
+  currentPetPopup: () => Promise<unknown>
+  onPetPopup: (callback: (state: unknown) => void) => () => void
+  savePetPopup: (payload: { type: "pet-save"; petId: string; level: number; kills: number }) => void
+  onPetSave: (callback: (payload: { petId: string; level: number; kills: number }) => void) => () => void
 }
 
 declare global {

@@ -19,6 +19,7 @@ export function petFill(progress: PetProgress): number {
 export type PetTrack = {
   level: number
   kills: number
+  live?: boolean
 }
 
 export function trackFill(track: PetTrack): number {
@@ -37,7 +38,20 @@ export function normalizePetTrack(value: unknown): PetTrack | null {
   const level = finiteFloor(raw.level)
   const kills = finiteFloor(raw.kills)
   if (level == null || kills == null) return null
-  return { level: Math.min(level, 3), kills }
+  return { level: Math.min(level, 3), kills, ...(raw.live ? { live: true } : {}) }
+}
+
+export function creditFarm(track: PetTrack | null | undefined): PetTrack {
+  const fresh = !track?.live
+  let level = fresh ? 0 : Math.min(track?.level ?? 0, 3)
+  let kills = fresh ? 1 : (track?.kills ?? 0) + 1
+  while (level < 3) {
+    const need = soulsToNext(level)
+    if (need == null || kills < need) break
+    kills -= need
+    level += 1
+  }
+  return { level, kills, live: true }
 }
 
 export function normalizePetTracks(value: unknown): Record<string, PetTrack> {

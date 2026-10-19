@@ -128,6 +128,9 @@ function startServer(root) {
 }
 
 let windowRef = null
+let petWindow = null
+let petPopupState = null
+let appPort = 0
 let stopLiveSync = () => {}
 
 function createWindow(port) {
@@ -154,7 +157,66 @@ function createWindow(port) {
   })
   if (above) win.setAlwaysOnTop(true, "floating")
   windowRef = win
+  win.on("closed", () => {
+    if (windowRef === win) windowRef = null
+    if (petWindow && !petWindow.isDestroyed()) petWindow.close()
+  })
   void win.loadURL(`http://127.0.0.1:${port}/`)
+}
+
+function petIsOpen() {
+  return Boolean(petWindow && !petWindow.isDestroyed() && petWindow.isVisible())
+}
+
+function tellPetVisible(open) {
+  windowRef?.webContents.send("pet-pop:visible", Boolean(open))
+}
+
+function raisePetWindow(focus) {
+  if (!petWindow || petWindow.isDestroyed()) return
+  petWindow.setAlwaysOnTop(true, "screen-saver")
+  try {
+    if (typeof petWindow.setVisibleOnAllWorkspaces === "function") petWindow.setVisibleOnAllWorkspaces(true)
+  } catch {
+    // Older Electron builds reject this on some desktops.
+  }
+  if (focus) petWindow.show()
+  else if (typeof petWindow.showInactive === "function") petWindow.showInactive()
+  else petWindow.show()
+  petWindow.moveTop()
+}
+
+function openPetWindow(focus = false) {
+  if (petWindow && !petWindow.isDestroyed()) {
+    raisePetWindow(focus)
+    tellPetVisible(true)
+    return true
+  }
+  petWindow = new BrowserWindow({
+    width: 360,
+    height: 280,
+    frame: false,
+    alwaysOnTop: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    skipTaskbar: true,
+    backgroundColor: "#10140f",
+    title: "Pet progress",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+  petWindow.on("closed", () => {
+    petWindow = null
+    tellPetVisible(false)
+  })
+  void petWindow.loadURL(`http://127.0.0.1:${appPort}/#pet`)
+  raisePetWindow(focus)
+  tellPetVisible(true)
+  return true
 }
 
 function publishUpdate(status, extra) {
@@ -194,6 +256,7 @@ app.whenReady().then(async () => {
   adoptLegacySave(WINDOW_NAME)
   const root = path.join(app.getAppPath(), "dist")
   const { port } = await startServer(root)
+  appPort = port
   createWindow(port)
   ensureUpdater()
 
@@ -243,13 +306,50 @@ app.whenReady().then(async () => {
     execPath: process.execPath,
     helperPath,
     adapterFile: savePath("aion2-live-adapter.json"),
-    send: (event) => windowRef?.webContents.send("live-sync:event", event),
+    send: (event) => {
+      windowRef?.webContents.send("live-sync:event", event)
+      const named = event?.type === "character" || (event?.type === "status" && event.phase === "capturing" && event.boundName)
+      if (named) openPetWindow()
+    },
   })
   stopLiveSync = () => liveSync.stop()
   ipcMain.handle("live-sync:get", () => liveSync.snapshot())
-  ipcMain.handle("live-sync:set", (_event, on) => liveSync.setEnabled(Boolean(on)))
+  ipcMain.handle("live-sync:set", (_event, on) => {
+    const result = liveSync.setEnabled(Boolean(on))
+    if (on) openPetWindow()
+    return result
+  })
   ipcMain.handle("live-sync:roster", (_event, names) => liveSync.setRoster(names))
   ipcMain.handle("live-sync:find", () => liveSync.findAdapter())
+  ipcMain.handle("pet-pop:open", () => openPetWindow(true))
+  ipcMain.handle("pet-pop:toggle", () => {
+    if (petIsOpen()) {
+      petWindow.close()
+      return false
+    }
+    openPetWindow(true)
+    return true
+  })
+  ipcMain.handle("pet-pop:close", () => {
+    if (petWindow && !petWindow.isDestroyed()) petWindow.close()
+    return false
+  })
+  ipcMain.handle("pet-pop:current", () => petPopupState)
+  ipcMain.on("pet-pop:state", (_event, state) => {
+    petPopupState = state ?? null
+    if (petWindow && !petWindow.isDestroyed()) {
+      const lines = Array.isArray(state?.lines) ? state.lines.length : 0
+      const height = Math.min(720, 188 + Math.max(lines, 1) * 92)
+      const [width] = petWindow.getSize()
+      petWindow.setSize(width, height)
+      petWindow.webContents.send("pet-pop:state", petPopupState)
+    }
+  })
+  ipcMain.on("pet-pop:save", (event, payload) => {
+    if (petWindow && event.sender === petWindow.webContents) {
+      windowRef?.webContents.send("pet-pop:save", payload)
+    }
+  })
 })
 
 app.on("before-quit", () => {

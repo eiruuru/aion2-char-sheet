@@ -1,6 +1,6 @@
 import type { CharacterRecord, StoreData } from "./store"
-import { petById, soulsToNext } from "./pets"
-import { normalizePetProgress, type PetProgress, type PetTrack } from "./petProgress"
+import { farmablePetByName, petById, soulsToNext } from "./pets"
+import { creditFarm, normalizePetProgress, type PetProgress, type PetTrack } from "./petProgress"
 
 export const LIVE_SYNC_EXPERIMENTAL = true
 
@@ -81,16 +81,23 @@ function applyToCharacter(character: CharacterRecord, event: LiveOdyleEvent | Li
 }
 
 function applyKills(character: CharacterRecord, event: LiveKillsEvent): CharacterRecord {
-  const id = character.trackingPetId
-  if (!id || !petById(id)) return character
-  const added = event.names.filter((name) => typeof name === "string" && name.trim()).length
-  if (!added) return character
-  const current = character.petTracks?.[id] ?? { level: 0, kills: 0 }
-  const track: PetTrack = { level: current.level, kills: current.kills + added }
+  const names = event.names
+    .map((name) => farmablePetByName(name))
+    .filter((pet): pet is NonNullable<typeof pet> => Boolean(pet))
+  if (!names.length) return character
+  const petTracks = { ...(character.petTracks ?? {}) }
+  let lastId = ""
+  let lastTrack: PetTrack = { level: 0, kills: 0 }
+  for (const pet of names) {
+    lastId = pet.id
+    lastTrack = creditFarm(petTracks[pet.id])
+    petTracks[pet.id] = lastTrack
+  }
   return {
     ...character,
-    petTracks: { ...(character.petTracks ?? {}), [id]: track },
-    petProgress: progressFromTrack(id, track, event.at, "live"),
+    trackingPetId: lastId,
+    petTracks,
+    petProgress: progressFromTrack(lastId, lastTrack, event.at, "live"),
   }
 }
 

@@ -1,27 +1,37 @@
 const readline = require("readline")
+const fs = require("fs")
+const path = require("path")
 const {
   npcapPresent,
-  extractNames,
-  matchRosterName,
-  findOdyleTotal,
+  parseFarmableNames,
+  createGameStream,
   realAdapters,
 } = require("./decode.cjs")
 
-const SNIFF_MS = 2500
-const KILL_GAP_MS = 1500
-const FLUSH_MS = 300
+const FLUSH_MS = 0
 const NOT_DETECTED = "Game packets have not been detected yet. Move or attack, then run Find Adapter."
 
 let capturing = false
 let capHandle = null
+let openHandles = []
 let capModule = null
 let roster = []
 let boundName = ""
-let lastOdyle = null
 let sawPackets = false
-const killSeen = new Map()
 let pendingKills = []
 let flushTimer = null
+let watch = { packets: 0, attempts: 0, hits: 0, appended: 0, emits: 0, seen: 0, gamePort: 0 }
+const farmable = loadFarmableNames()
+const gameStream = createGameStream(farmable, path.join(process.env.APPDATA || path.join(__dirname, ".."), "aion2-tracker", "live-mobs.json"))
+
+function loadFarmableNames() {
+  const source = path.join(__dirname, "../../src/model/pets.ts")
+  try {
+    return parseFarmableNames(fs.readFileSync(source, "utf8"))
+  } catch {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, "farmable-names.json"), "utf8"))
+  }
+}
 
 function emit(event) {
   process.stdout.write(`${JSON.stringify(event)}\n`)
@@ -57,28 +67,55 @@ function payloadFromPacket(cap, buffer, nbytes) {
     if (!ethernet || ethernet.info.type !== decoders.PROTOCOL.ETHERNET.IPV4) return null
     const ip = decoders.IPV4(buffer, ethernet.offset)
     if (!ip) return null
-    const header = ip.info.protocol === decoders.PROTOCOL.IP.UDP
-      ? decoders.UDP(buffer, ip.offset)
-      : null
+    const proto = ip.info.protocol === decoders.PROTOCOL.IP.UDP
+      ? "udp"
+      : ip.info.protocol === decoders.PROTOCOL.IP.TCP
+        ? "tcp"
+        : ""
+    if (!proto) return null
+    const header = proto === "udp" ? decoders.UDP(buffer, ip.offset) : decoders.TCP(buffer, ip.offset)
     if (!header) return null
     const start = header.offset
     const end = Math.min(nbytes, ip.offset + ip.info.totallen)
-    if (start >= end) return null
-    return buffer.subarray(start, end)
+    if (start >= end || end - start < 8) return null
+    return {
+      proto,
+      payload: Buffer.from(buffer.subarray(start, end)),
+      srcaddr: ip.info.srcaddr,
+      dstaddr: ip.info.dstaddr,
+      srcport: header.info.srcport,
+      dstport: header.info.dstport,
+      seq: header.info.seqno,
+      flags: header.info.flags || 0,
+    }
   } catch {
     return null
   }
 }
 
+function findRosterBytes(payload) {
+  for (const entry of roster) {
+    const name = String(entry || "").trim()
+    if (name.length < 3) continue
+    const ascii = Buffer.from(name, "utf8")
+    if (payload.includes(ascii)) return entry
+    const wide = Buffer.alloc(name.length * 2)
+    for (let i = 0; i < name.length; i += 1) wide[i * 2] = name.charCodeAt(i) & 0xff
+    if (payload.includes(wide)) return entry
+    if (payload.length > 1 && payload.subarray(1).includes(wide)) return entry
+  }
+  return null
+}
+
 function openListen(cap, deviceName, onSlice) {
   const handle = new cap.Cap()
   const buffer = Buffer.alloc(65535)
-  handle.open(deviceName, "udp", 10 * 1024 * 1024, buffer)
+  handle.open(deviceName, "tcp or udp", 10 * 1024 * 1024, buffer)
   if (handle.setMinBytes) handle.setMinBytes(0)
   handle.on("packet", (nbytes) => {
-    const payload = payloadFromPacket(cap, buffer, nbytes)
-    if (!payload || payload.length < 8) return
-    onSlice(Buffer.from(payload.subarray(0, Math.min(payload.length, 256))))
+    const parsed = payloadFromPacket(cap, buffer, nbytes)
+    if (!parsed) return
+    onSlice(parsed)
   })
   return handle
 }
@@ -89,43 +126,24 @@ function flushKills() {
   const names = pendingKills
   pendingKills = []
   emit({ type: "kills", names, at: new Date().toISOString() })
+  watch.emits += 1
 }
 
 function noteKill(name) {
-  const key = name.toLowerCase()
-  const now = Date.now()
-  const last = killSeen.get(key) || 0
-  if (now - last < KILL_GAP_MS) return
-  killSeen.set(key, now)
-  if (killSeen.size > 200) {
-    const oldest = killSeen.keys().next().value
-    if (oldest) killSeen.delete(oldest)
-  }
   pendingKills.push(name)
   if (!flushTimer) flushTimer = setTimeout(flushKills, FLUSH_MS)
 }
 
-function notePayload(slice) {
-  const names = extractNames(slice)
-  const who = matchRosterName(names, roster)
-  if (who && who !== boundName) {
-    boundName = who
-    emit({ type: "character", name: who })
-    status("capturing", `Live readings are updating ${who}.`, who)
-  }
-  const amount = findOdyleTotal(slice)
-  if (amount != null && amount !== lastOdyle) {
-    lastOdyle = amount
-    emit({ type: "odyle", amount, at: new Date().toISOString() })
-  }
-  const rosterKeys = new Set(roster.map((name) => name.toLowerCase()))
-  for (const name of names) {
-    if (rosterKeys.has(name.toLowerCase())) continue
+function noteDecoded(meta, marked) {
+  if (meta.proto !== "tcp") return
+  const found = gameStream.push(meta, marked)
+  watch.packets += 1
+  watch.attempts += found.attempts
+  watch.appended += found.appended
+  watch.framed = (watch.framed || 0) + (found.framed || 0)
+  for (const name of found.names) {
+    watch.hits += 1
     noteKill(name)
-  }
-  if (!sawPackets) {
-    sawPackets = true
-    if (!boundName) status("capturing", roster.length ? "Waiting for a roster character." : "Packets are arriving.")
   }
 }
 
@@ -142,32 +160,76 @@ function bindingReady() {
   return cap
 }
 
-function watchDevice(cap, deviceName) {
-  closeHandle()
-  sawPackets = false
-  const handle = openListen(cap, deviceName, (slice) => {
-    if (capHandle === handle) notePayload(slice)
-  })
-  capHandle = handle
-  capturing = true
-  return handle
+function closeAll() {
+  const current = openHandles
+  openHandles = []
+  capHandle = null
+  for (const source of current) closeHandle(source.handle)
 }
 
-function startCapture(deviceName) {
+function lockSource(source) {
+  if (capHandle === source.handle) return
+  capHandle = source.handle
+  capturing = true
+  emit({
+    type: "adapter",
+    device: source.name,
+    description: source.description,
+    udp: 1,
+  })
+}
+
+function listenAll() {
   const cap = bindingReady()
   if (!cap) {
     capturing = false
     return
   }
-  const device = typeof deviceName === "string" ? deviceName : ""
-  if (!device) {
-    capturing = true
-    status("needs-adapter", NOT_DETECTED, "")
+  closeAll()
+  sawPackets = false
+  const devices = cap.Cap.deviceList?.() || []
+  const adapters = realAdapters(devices)
+  const loopbacks = devices.filter((device) => device && /loopback/i.test(`${device.name || ""} ${device.description || ""}`))
+  status("capturing", roster.length ? "Checking packets for the logged-in roster character." : "Packets are arriving.", boundName)
+  for (const device of [...adapters.map((item) => ({ ...item, loopback: false })), ...loopbacks.map((item) => ({ ...item, loopback: true }))]) {
+    try {
+      const source = { name: device.name, description: typeof device.description === "string" ? device.description : "", handle: null, loopback: Boolean(device.loopback) }
+      source.handle = openListen(cap, device.name, (parsed) => {
+        watch.seen += 1
+        const gamePort = parsed.srcport === 13328 || parsed.dstport === 13328
+        if (gamePort) watch.gamePort += 1
+        const hit = findRosterBytes(parsed.payload)
+        if (hit && hit !== boundName) {
+          lockSource(source)
+          boundName = hit
+          emit({ type: "character", name: hit })
+          status("capturing", `Live readings are updating ${hit}.`, hit)
+        }
+        if (capHandle === source.handle) {
+          if (!sawPackets) {
+            sawPackets = true
+            if (!boundName) status("capturing", roster.length ? "Checking packets for the logged-in roster character." : "Packets are arriving.")
+          }
+          noteDecoded(parsed, Boolean(hit && hit === boundName))
+        }
+      })
+      openHandles.push(source)
+    } catch {
+      // This adapter could not be opened. The others keep listening.
+    }
+  }
+  if (!openHandles.length) {
+    capturing = false
+    emit({ type: "adapter", device: "", description: "", udp: 0 })
+    status("needs-adapter", NOT_DETECTED, boundName)
     return
   }
+  capturing = true
+}
+
+function startCapture() {
   try {
-    status("needs-adapter", NOT_DETECTED, boundName)
-    watchDevice(cap, device)
+    listenAll()
   } catch (error) {
     capturing = false
     const message = error instanceof Error ? error.message : "Could not open Npcap."
@@ -175,60 +237,13 @@ function startCapture(deviceName) {
   }
 }
 
-async function findAdapter() {
-  const cap = bindingReady()
-  if (!cap) return
-  closeHandle()
-  sawPackets = false
-  status("starting", "Finding the adapter. Keep moving or attacking.", boundName)
-  const devices = realAdapters(cap.Cap.deviceList?.() || [])
-  const opened = []
-  let settled = false
-  let timer = null
-  const winner = await new Promise((resolve) => {
-    const finish = (found) => {
-      if (settled) return
-      settled = true
-      if (timer) clearTimeout(timer)
-      resolve(found)
-    }
-    for (const device of devices) {
-      try {
-        const handle = openListen(cap, device.name, (slice) => {
-          if (!settled) finish({ device, handle })
-          if (capHandle === handle) notePayload(slice)
-        })
-        opened.push(handle)
-      } catch {
-        // this device would not open
-      }
-    }
-    if (!opened.length) finish(null)
-    else timer = setTimeout(() => finish(null), SNIFF_MS)
-  })
-  for (const handle of opened) {
-    if (!winner || handle !== winner.handle) closeHandle(handle)
-  }
-  if (!winner) {
-    capturing = false
-    emit({ type: "adapter", device: "", description: "", udp: 0 })
-    status("needs-adapter", NOT_DETECTED, boundName)
-    return
-  }
-  capHandle = winner.handle
-  capturing = true
-  emit({
-    type: "adapter",
-    device: winner.device.name,
-    description: typeof winner.device.description === "string" ? winner.device.description : "",
-    udp: 1,
-  })
-  status("capturing", boundName ? `Live readings are updating ${boundName}.` : "Packets are arriving.", boundName)
+function findAdapter() {
+  listenAll()
 }
 
 function stopCapture() {
   capturing = false
-  closeHandle()
+  closeAll()
   if (flushTimer) clearTimeout(flushTimer)
   flushTimer = null
   pendingKills = []

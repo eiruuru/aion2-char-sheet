@@ -24,4 +24,25 @@ contextBridge.exposeInMainWorld("tracker", {
     ipcRenderer.on("live-sync:event", listener)
     return () => ipcRenderer.removeListener("live-sync:event", listener)
   },
+  openPetPopup: () => ipcRenderer.invoke("pet-pop:open"),
+  togglePetPopup: () => ipcRenderer.invoke("pet-pop:toggle"),
+  onPetVisible: (callback) => {
+    const listener = (_event, open) => callback(Boolean(open))
+    ipcRenderer.on("pet-pop:visible", listener)
+    return () => ipcRenderer.removeListener("pet-pop:visible", listener)
+  },
+  closePetPopup: () => ipcRenderer.invoke("pet-pop:close"),
+  publishPetPopup: (state) => ipcRenderer.send("pet-pop:state", state),
+  currentPetPopup: () => ipcRenderer.invoke("pet-pop:current"),
+  onPetPopup: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on("pet-pop:state", listener)
+    return () => ipcRenderer.removeListener("pet-pop:state", listener)
+  },
+  savePetPopup: (payload) => ipcRenderer.send("pet-pop:save", payload),
+  onPetSave: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on("pet-pop:save", listener)
+    return () => ipcRenderer.removeListener("pet-pop:save", listener)
+  },
 })

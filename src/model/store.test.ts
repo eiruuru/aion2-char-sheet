@@ -14,6 +14,7 @@ describe("last character", () => {
 
   it("keeps a catalog pet's kills and seeds them from an older pet reading", () => {
     expect(PETS).toHaveLength(207)
+    expect(PETS.every((pet) => pet.icon?.includes("/game/pets/"))).toBe(true)
     expect(soulsToNext(0)).toBe(5)
     expect(soulsToNext(1)).toBe(25)
     expect(soulsToNext(2)).toBe(75)

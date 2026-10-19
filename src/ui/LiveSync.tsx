@@ -1,65 +1,82 @@
 import type { LiveStatus } from "../model/liveSync"
-import { LIVE_SYNC_EXPERIMENTAL } from "../model/liveSync"
 
-const PHASE_LABEL: Record<LiveStatus["phase"], string> = {
-  off: "Live Sync off",
-  starting: "Live Sync starting",
-  capturing: "Live Sync on",
-  "needs-npcap": "Npcap missing",
-  "needs-relog": "Re-log once",
-  "needs-adapter": "Find Adapter",
-  unavailable: "Live Sync unavailable",
+function streamState(status: LiveStatus, desktop: boolean): { text: string; tone: "found" | "looking" | "idle" } {
+  if (!desktop) return { text: "in the Windows app", tone: "idle" }
+  if (status.phase === "needs-npcap") return { text: "needs Npcap", tone: "looking" }
+  if (status.phase === "unavailable") return { text: "unavailable", tone: "looking" }
+  if (status.phase === "off") return { text: "off", tone: "idle" }
+  if (status.phase === "capturing" && status.boundName) return { text: "found", tone: "found" }
+  return { text: "looking", tone: "looking" }
 }
 
-export function LiveSyncButton({
-  status,
-  desktop,
-  onToggle,
-}: {
-  status: LiveStatus
-  desktop: boolean
-  onToggle: () => void
-}) {
-  const on = status.phase === "starting" || status.phase === "capturing" || status.phase === "needs-relog" || status.phase === "needs-adapter"
-  const label = desktop ? PHASE_LABEL[status.phase] : "Live Sync"
-  return (
-    <button
-      type="button"
-      className={on ? "live-sync on" : "live-sync"}
-      aria-pressed={on}
-      title={status.detail || "Optional Windows capture for pet souls and Odyle"}
-      onClick={onToggle}
-    >
-      {label}
-      {LIVE_SYNC_EXPERIMENTAL ? <span>Experimental</span> : null}
-    </button>
-  )
-}
-
-export function LiveSyncNote({
+export function LiveStatusStrip({
   status,
   characterName,
+  farmingName,
+  sessionOn,
   desktop,
+  onToggle,
+  onToggleSession,
+  onOpenFarm,
+  farmOpen,
+  onToggleFarm,
   onFindAdapter,
 }: {
   status: LiveStatus
   characterName: string | null
+  farmingName: string | null
+  sessionOn: boolean
   desktop: boolean
+  onToggle: () => void
+  onToggleSession: () => void
+  onOpenFarm: () => void
+  farmOpen: boolean
+  onToggleFarm: () => void
   onFindAdapter: () => void
 }) {
-  if (!desktop) return <p className="muted live-note">Live Sync runs in the Windows app. Install Npcap, then turn it on there.</p>
-  const watching = status.phase === "capturing" || status.phase === "needs-relog" || status.phase === "starting" || status.phase === "needs-adapter"
+  const stream = streamState(status, desktop)
   return (
-    <div className="live-note">
-      <p className="muted">
-        {status.detail || "Passive Npcap read. It does not log in or change the game."}
-        {characterName && watching ? ` Following ${characterName}.` : ""}
-      </p>
-      {watching ? (
-        <div className="live-marks">
-          <button type="button" onClick={onFindAdapter}>Find Adapter</button>
-        </div>
+    <div className="live-strip" role="status">
+      <button
+        type="button"
+        className={`live-chip ${stream.tone}`}
+        title={status.detail || "Turn packet reading on or off"}
+        onClick={onToggle}
+      >
+        <span className="live-dot" />
+        Stream: {stream.text}
+      </button>
+      <span className={characterName ? "live-chip found" : "live-chip"}>
+        <span className="live-dot" />
+        Character: {characterName || "—"}
+      </span>
+      <button
+        type="button"
+        className={sessionOn ? "live-chip found" : "live-chip"}
+        title={sessionOn ? "Stop counting kills" : "Count kills until you turn this off"}
+        onClick={onToggleSession}
+      >
+        <span className="live-dot" />
+        Session: {sessionOn ? "on" : "off"}
+      </button>
+      <button type="button" className={farmingName ? "live-chip found" : "live-chip"} onClick={onOpenFarm}>
+        <span className="live-dot" />
+        Farming: {farmingName || "—"}
+      </button>
+      <button type="button" className={farmOpen ? "live-moon open" : "live-moon"} aria-pressed={farmOpen} aria-label={farmOpen ? "Close pet progress" : "Open pet progress"} title={farmOpen ? "Close pet progress" : "Open pet progress"} onClick={onToggleFarm}>
+        <MoonIcon />
+      </button>
+      {status.phase === "needs-adapter" ? (
+        <button type="button" className="live-find" onClick={onFindAdapter}>Find adapter</button>
       ) : null}
     </div>
+  )
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M10.2 2.2a5.6 5.6 0 1 0 3.6 8.8 4.6 4.6 0 0 1-3.6-8.8Z" fill="currentColor" />
+    </svg>
   )
 }

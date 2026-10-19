@@ -1,8 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { CharacterRecord } from "../model/store"
 import { parseStoredNumber } from "../model/store"
-import { trackFill, type PetTrack } from "../model/petProgress"
-import { petById, soulsToNext } from "../model/pets"
 import { formatCountdown, formatNumber } from "../model/format"
 import { CUBE_COST, type OdyleProjection } from "../model/odyle"
 import { rosterGoals, type SessionItem } from "../model/checklist"
@@ -18,8 +16,6 @@ export function GoalsPanel({
   onSaveOdyle,
   onSetOdyleTimer,
   onSpendCube,
-  onSavePet,
-  liveNote,
 }: {
   character: CharacterRecord | null
   projection: OdyleProjection | null
@@ -29,8 +25,6 @@ export function GoalsPanel({
   onSaveOdyle: (amount: number) => void
   onSetOdyleTimer: (remainingMs: number) => void
   onSpendCube: () => void
-  onSavePet: (petId: string, track: PetTrack) => void
-  liveNote: ReactNode
 }) {
   const [tab, setTab] = useState<"goals" | "class" | "general">("goals")
   const goals = rosterGoals(due, character?.id ?? null, projection, now)
@@ -46,8 +40,6 @@ export function GoalsPanel({
           onSpendCube={onSpendCube}
         />
       ) : null}
-      {liveNote}
-      {character ? <PetCard character={character} onSave={onSavePet} /> : null}
       <section className="goals panel">
         <div className="tabs" role="tablist" aria-label="Goals">
           <button type="button" role="tab" aria-selected={tab === "goals"} onClick={() => setTab("goals")}>Goals</button>
@@ -223,58 +215,6 @@ function OdyleCard({
           <CubeIcon />
         </button>
       </div>
-    </section>
-  )
-}
-
-function PetCard({ character, onSave }: { character: CharacterRecord; onSave: (petId: string, track: PetTrack) => void }) {
-  const pet = petById(character.trackingPetId)
-  const track = pet ? character.petTracks?.[pet.id] ?? { level: 0, kills: 0 } : null
-  const progress = character.petProgress ?? null
-  const [levelDraft, setLevelDraft] = useState(track ? String(track.level) : progress ? String(progress.level) : "")
-  const [killsDraft, setKillsDraft] = useState(track ? String(track.kills) : progress ? String(progress.souls) : "")
-  useEffect(() => {
-    setLevelDraft(track ? String(track.level) : progress ? String(progress.level) : "")
-    setKillsDraft(track ? String(track.kills) : progress ? String(progress.souls) : "")
-  }, [character.id, character.trackingPetId, track?.level, track?.kills, progress?.updatedAt, progress?.level, progress?.souls])
-  const next = track ? soulsToNext(track.level) : null
-  const fill = track ? trackFill(track) : 0
-  const title = pet?.name || "Pet"
-  return (
-    <section className="panel odyle-card">
-      <h2>Pet progress</h2>
-      <p className="odyle-readout">
-        <strong>{title}</strong>
-        {track ? ` · Lv ${track.level}` : null}
-      </p>
-      {track && next ? (
-        <>
-          <div className="meter" role="meter" aria-valuemin={0} aria-valuemax={next} aria-valuenow={Math.min(track.kills, next)} aria-label="Pet souls">
-            <span style={{ width: `${fill * 100}%` }} />
-          </div>
-          <p className="odyle-readout">{track.kills} / {next} souls</p>
-        </>
-      ) : track ? <p className="muted">{track.kills} kills. This pet is at its highest level.</p> : <p className="muted">Open Pets and choose a portrait to count kills.</p>}
-      {pet ? (
-        <div className="odyle-controls pet-controls">
-          <label>
-            Level
-            <input className="timer-input" inputMode="numeric" autoComplete="off" value={levelDraft} onChange={(event) => setLevelDraft(event.target.value)} />
-          </label>
-          <label>
-            Kills
-            <input inputMode="numeric" autoComplete="off" value={killsDraft} onChange={(event) => setKillsDraft(event.target.value)} />
-          </label>
-          <button type="button" className="icon-button" aria-label="Save pet progress" title="Save pet progress" onClick={() => {
-            const level = parseStoredNumber(levelDraft)
-            const kills = parseStoredNumber(killsDraft)
-            if (level == null || kills == null) return
-            onSave(pet.id, { level: Math.min(level, 3), kills })
-          }}>
-            <CheckIcon />
-          </button>
-        </div>
-      ) : null}
     </section>
   )
 }

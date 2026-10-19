@@ -29,16 +29,15 @@ import { rosterOrder } from "./model/suggestions"
 import { CUBE_COST, odyleCap, projectOdyle, shiftOdyleClock, spendOdyleReading, type OdyleProjection } from "./model/odyle"
 import { desktopBridge } from "./desktop"
 import { applyLiveEvent, emptyLiveStatus, progressFromTrack, type LiveStatus } from "./model/liveSync"
-import type { PetTrack } from "./model/petProgress"
-import { petByName } from "./model/pets"
+import { farmablePetByName, petById, soulsToNext } from "./model/pets"
 import { APP_VERSION, reduceUpdateStatus, UPDATE_SKIP_KEY, WINDOW_TITLE, type UpdateOffer } from "./model/updates"
 import { AddCharacter } from "./ui/AddCharacter"
 import { CharacterPanel } from "./ui/CharacterPanel"
 import { GoalsPanel } from "./ui/Goals"
-import { LiveSyncButton, LiveSyncNote } from "./ui/LiveSync"
+import { LiveStatusStrip } from "./ui/LiveSync"
 import { ExportIcon, ImportIcon, MembershipIcon, PinIcon, TrashIcon, UpdateIcon } from "./ui/icons"
 import { Onboarding } from "./ui/Onboarding"
-import { PetsScreen } from "./ui/Pets"
+import { openFarmWindow, toggleFarmWindow, writePetPopup } from "./ui/PetPopup"
 import { SAMPLE_ID, charactersForTour, sampleProgress } from "./ui/sampleSheet"
 import { clearOnboardingSeen, readOnboardingSeen, shouldOpenOnboarding, writeOnboardingSeen } from "./ui/tour"
 
@@ -62,14 +61,20 @@ export function App() {
   const [now, setNow] = useState(() => Date.now())
   const [aboveGame, setAboveGame] = useState(false)
   const [tourOpen, setTourOpen] = useState(() => shouldOpenOnboarding(loadStore().characters.length, readOnboardingSeen(localStorage)))
-  const [screen, setScreen] = useState<"sheet" | "pets">("sheet")
-  const [recentMobs, setRecentMobs] = useState<string[]>([])
-  const [detailPetId, setDetailPetId] = useState<string | null>(null)
   const [updateOffer, setUpdateOffer] = useState<UpdateOffer | null>(null)
   const [updateNotice, setUpdateNotice] = useState("")
   const desktop = desktopBridge()
   const [liveStatus, setLiveStatus] = useState<LiveStatus>(() => emptyLiveStatus())
   const boundIdRef = useRef<string | null>(null)
+  const selectedIdRef = useRef<string | null>(selectedId)
+  const farmWindowOpened = useRef(false)
+  const [farmSession, setFarmSession] = useState(false)
+  const [farmPopOpen, setFarmPopOpen] = useState(false)
+  const [sessionIds, setSessionIds] = useState<string[]>([])
+  const farmSessionRef = useRef(false)
+  const sessionIdsRef = useRef<string[]>([])
+  const sessionKillsRef = useRef<Record<string, number>>({})
+  selectedIdRef.current = selectedId
   const updateAsked = useRef(false)
   const updateOfferRef = useRef<UpdateOffer | null>(null)
   const storeRef = useRef(store)
@@ -132,20 +137,87 @@ export function App() {
     [shownCharacters, store.membership, now],
   )
   const selected = ordered.find((character) => character.id === chooseCharacter(selectedId, ordered.map((character) => character.id))) ?? null
-  const followedId = selected && selected.id !== SAMPLE_ID ? selected.id : null
-  const followedTrack = useRef<string | null>(followedId)
-  useEffect(() => {
-    if (followedTrack.current === followedId) return
-    followedTrack.current = followedId
-    const next = store.characters.find((character) => character.id === followedId)
-    setDetailPetId(next?.trackingPetId ?? null)
-  }, [followedId, store.characters])
-
+  const farmingCharacter = (() => {
+    const bound = liveStatus.boundName.trim().toLowerCase()
+    const match = bound ? store.characters.find((character) => character.id !== SAMPLE_ID && character.name.toLowerCase() === bound) : null
+    return match ?? (selected && selected.id !== SAMPLE_ID ? selected : null)
+  })()
   useEffect(() => {
     if (!desktop?.setLiveRoster) return
     const names = store.characters.map((character) => character.name).filter(Boolean)
     void desktop.setLiveRoster(names)
   }, [desktop, store.characters])
+
+  useEffect(() => {
+    if (!desktop?.onPetVisible) return
+    return desktop.onPetVisible(setFarmPopOpen)
+  }, [desktop])
+
+  useEffect(() => {
+    if (liveStatus.phase === "capturing" && liveStatus.boundName && !farmWindowOpened.current) {
+      farmWindowOpened.current = true
+      openFarmWindow()
+    }
+  }, [liveStatus.phase, liveStatus.boundName])
+
+  useEffect(() => {
+    const id = boundIdRef.current
+    const character = id ? store.characters.find((entry) => entry.id === id) : farmingCharacter
+    const lines = sessionIds.flatMap((petId) => {
+      const pet = petById(petId)
+      if (!pet) return []
+      const track = character?.petTracks?.[petId] ?? { level: 0, kills: 0 }
+      return [{
+        petId: pet.id,
+        name: pet.name,
+        genus: pet.genus,
+        icon: pet.icon,
+        level: track.level,
+        kills: track.kills,
+        next: soulsToNext(track.level),
+        sessionKills: sessionKillsRef.current[petId] ?? 0,
+      }]
+    })
+    writePetPopup({
+      characterName: character?.name ?? "",
+      active: farmSession,
+      lines,
+    })
+  }, [store, farmSession, sessionIds, farmingCharacter])
+
+  useEffect(() => {
+    function applyManual(petId: string, level: number, kills: number) {
+      const id = boundIdRef.current ?? selectedIdRef.current
+      if (!id || id === SAMPLE_ID) return
+      const at = new Date().toISOString()
+      setStore((current) => ({
+        ...current,
+        characters: current.characters.map((character) => (
+          character.id === id
+            ? {
+                ...character,
+                trackingPetId: petId,
+                petTracks: { ...(character.petTracks ?? {}), [petId]: { level, kills, live: true } },
+                petProgress: progressFromTrack(petId, { level, kills, live: true }, at, "manual"),
+              }
+            : character
+        )),
+      }))
+    }
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== location.origin) return
+      const data = event.data as { type?: string; petId?: string; level?: number; kills?: number }
+      if (data?.type !== "pet-save" || typeof data.petId !== "string") return
+      if (typeof data.level !== "number" || typeof data.kills !== "number") return
+      applyManual(data.petId, data.level, data.kills)
+    }
+    window.addEventListener("message", onMessage)
+    const stop = desktop?.onPetSave?.((payload) => applyManual(payload.petId, payload.level, payload.kills))
+    return () => {
+      window.removeEventListener("message", onMessage)
+      stop?.()
+    }
+  }, [desktop])
 
   useEffect(() => {
     if (!desktop?.onLiveEvent) return
@@ -182,12 +254,26 @@ export function App() {
         return
       }
       if (event.type === "kills") {
-        setRecentMobs((current) => [...event.names, ...current].slice(0, 12))
+        const names = event.names.filter((name) => farmablePetByName(name))
+        if (!names.length || !farmSessionRef.current) return
+        const id = boundIdRef.current
+        if (!id) return
+        for (const name of names) {
+          const pet = farmablePetByName(name)
+          if (!pet) continue
+          if (!sessionIdsRef.current.includes(pet.id)) sessionIdsRef.current.push(pet.id)
+          sessionKillsRef.current[pet.id] = (sessionKillsRef.current[pet.id] ?? 0) + 1
+        }
+        setSessionIds([...sessionIdsRef.current])
+        setStore((current) => applyLiveEvent(current, id, { ...event, names }))
+        setNow(Date.now())
+        if (!farmWindowOpened.current) {
+          farmWindowOpened.current = true
+          openFarmWindow()
+        }
+        return
       }
-      const id = boundIdRef.current
-      if (!id || event.type === "pet") return
-      setStore((current) => applyLiveEvent(current, id, event))
-      setNow(Date.now())
+      if (event.type === "odyle" || event.type === "pet") return
     })
   }, [desktop])
 
@@ -306,42 +392,6 @@ export function App() {
       characters: current.characters.map((character) => (
         character.id === selected.id ? patch(character) : character
       )),
-    }))
-  }
-
-  function savePet(characterId: string, petId: string, track: PetTrack) {
-    const at = new Date().toISOString()
-    setStore((current) => ({
-      ...current,
-      characters: current.characters.map((character) => (
-        character.id === characterId
-          ? {
-              ...character,
-              trackingPetId: character.trackingPetId || petId,
-              petTracks: { ...(character.petTracks ?? {}), [petId]: track },
-              petProgress: progressFromTrack(petId, track, at, "manual"),
-            }
-          : character
-      )),
-    }))
-  }
-
-  function openPet(characterId: string, petId: string) {
-    setDetailPetId(petId)
-    setStore((current) => ({
-      ...current,
-      characters: current.characters.map((character) => {
-        if (character.id !== characterId) return character
-        const existing = character.petTracks?.[petId]
-        const profile = petByName(character.latest?.pet?.name)?.id === petId ? character.latest?.pet?.level ?? 0 : 0
-        const track = existing ?? { level: profile, kills: 0 }
-        return {
-          ...character,
-          trackingPetId: petId,
-          petTracks: { ...(character.petTracks ?? {}), [petId]: track },
-          petProgress: progressFromTrack(petId, track, new Date().toISOString(), character.petProgress?.source ?? "manual"),
-        }
-      }),
     }))
   }
 
@@ -489,33 +539,6 @@ export function App() {
         </div>
         <div className="actions">
           <span className="app-version">v{APP_VERSION}</span>
-          <button
-            type="button"
-            className={screen === "pets" ? "live-sync on" : "live-sync"}
-            aria-pressed={screen === "pets"}
-            onClick={() => setScreen((current) => current === "pets" ? "sheet" : "pets")}
-          >
-            Pets
-          </button>
-          <LiveSyncButton
-            status={liveStatus}
-            desktop={Boolean(desktop)}
-            onToggle={() => {
-              if (!desktop) {
-                setUpdateNotice("Live Sync runs inside the Windows app.")
-                return
-              }
-              const on = liveStatus.phase === "off" || liveStatus.phase === "needs-npcap" || liveStatus.phase === "unavailable"
-              void desktop.setLiveSync(on).then((status) => {
-                setLiveStatus({
-                  phase: status.phase,
-                  detail: status.detail,
-                  boundName: status.boundName || liveStatus.boundName,
-                  experimental: status.experimental,
-                })
-              })
-            }}
-          />
           <button type="button" className="icon-button ghost" aria-label="Check for updates" title="Check for updates" onClick={() => {
             updateAsked.current = true
             setUpdateNotice("")
@@ -583,6 +606,49 @@ export function App() {
           </button>
         </div>
       </header>
+      <LiveStatusStrip
+        status={liveStatus}
+        characterName={liveStatus.boundName || null}
+        farmingName={sessionIds.map((id) => petById(id)?.name).filter((name): name is string => Boolean(name)).join(", ") || null}
+        sessionOn={farmSession}
+        desktop={Boolean(desktop)}
+        onToggleSession={() => {
+          const next = !farmSessionRef.current
+          farmSessionRef.current = next
+          if (next) {
+            sessionIdsRef.current = []
+            sessionKillsRef.current = {}
+            setSessionIds([])
+            openFarmWindow()
+          }
+          setFarmSession(next)
+        }}
+        onToggle={() => {
+          const turningOn = liveStatus.phase === "off" || liveStatus.phase === "needs-npcap" || liveStatus.phase === "unavailable"
+          if (!desktop) {
+            setUpdateNotice("Live Sync runs inside the Windows app.")
+            return
+          }
+          void desktop.setLiveSync(turningOn).then((status) => {
+            setLiveStatus({
+              phase: status.phase,
+              detail: status.detail,
+              boundName: status.boundName || liveStatus.boundName,
+              experimental: status.experimental,
+            })
+          }).catch(() => {})
+        }}
+        onOpenFarm={openFarmWindow}
+        farmOpen={farmPopOpen}
+        onToggleFarm={() => {
+          if (desktop?.togglePetPopup) {
+            void desktop.togglePetPopup().then(setFarmPopOpen)
+            return
+          }
+          toggleFarmWindow()
+        }}
+        onFindAdapter={() => { void desktop?.findAdapter() }}
+      />
       {updateNotice ? <p className="muted update-status">{updateNotice}</p> : null}
       {updateOffer ? (
         <section className="panel update-card">
@@ -605,24 +671,6 @@ export function App() {
         </section>
       ) : null}
       {error ? <p className="error banner">{error}</p> : null}
-      {screen === "pets" ? (
-        <PetsScreen
-          character={selected && selected.id !== SAMPLE_ID ? selected : null}
-          waiting={Boolean(desktop) && !liveStatus.boundName && (liveStatus.phase === "capturing" || liveStatus.phase === "starting" || liveStatus.phase === "needs-relog")}
-          recentMobs={recentMobs}
-          detailId={detailPetId}
-          onBack={() => setScreen("sheet")}
-          onOpen={(petId) => {
-            if (!selected || selected.id === SAMPLE_ID) return
-            openPet(selected.id, petId)
-          }}
-          onCloseDetail={() => setDetailPetId(null)}
-          onSaveTrack={(petId, track) => {
-            if (!selected || selected.id === SAMPLE_ID) return
-            savePet(selected.id, petId, track)
-          }}
-        />
-      ) : (
       <div className="workspace">
         <div className="character-column">
           <section className="roster-bar panel" data-tour="roster">
@@ -688,21 +736,8 @@ export function App() {
           onSaveOdyle={saveOdyle}
           onSetOdyleTimer={setOdyleTimer}
           onSpendCube={spendCube}
-          onSavePet={(petId, track) => {
-            if (!selected || selected.id === SAMPLE_ID) return
-            savePet(selected.id, petId, track)
-          }}
-          liveNote={(
-            <LiveSyncNote
-              status={liveStatus}
-              characterName={liveStatus.boundName || null}
-              desktop={Boolean(desktop)}
-              onFindAdapter={() => { void desktop?.findAdapter() }}
-            />
-          )}
         />
       </div>
-      )}
       {tourOpen ? (
         <Onboarding
           hasCharacter={Boolean(selected)}

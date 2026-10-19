@@ -2,6 +2,8 @@
 
 A local sheet for an Aion 2 roster. Search a public profile, pin a main and the alts, and keep the day's work on this device.
 
+This program is free software under the GNU General Public License version 3. The game-message framer in `electron/capture/decode.cjs` is our own code. Its layout is informed by the published DBAion2 DPS source, also GPL-3.0, commit `55931aa`.
+
 The public character page supplies the portrait, class, faction, level, title, gear score, combat power, equipment, skills, Daevanion boards, and cosmetics. Gear names use the same grade colors as the game. A visible roster refreshes about every 20 minutes, one character at a time.
 
 You type the Odyle reading. The sheet then adds 15 every 3 hours and stops at the cap: 560, or 840 with Special Quai Membership. Opening a cube subtracts 40. Goals ranks what is due. Pet souls and the next-level total can be typed on the same side of the sheet.

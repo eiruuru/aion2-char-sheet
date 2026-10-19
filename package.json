@@ -1,7 +1,8 @@
 {
   "name": "aion2-tracker",
   "private": true,
-  "version": "0.9.0",
+  "version": "0.10.0",
+  "license": "GPL-3.0-only",
   "description": "Local Aion 2 character sheet. Public profiles supply gear, skills, and Daevanion. Dailies, goals, and the Odyle clock stay on this device.",
   "type": "module",
   "main": "electron/main.cjs",
@@ -62,7 +63,7 @@
     ],
     "afterPack": "electron/after-pack.cjs",
     "releaseInfo": {
-      "releaseNotes": "Pets lists every obtainable pet. Open a portrait to count kills from any mob. Live Sync follows the roster character who is logged in, and Find Adapter checks every real network device at once."
+      "releaseNotes": "Live Sync counts farmable pet kills for the logged-in character while a session is on. The moon button opens a progress window that stays above other windows."
     },
     "publish": {
       "provider": "github",

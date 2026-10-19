@@ -1,9 +1,12 @@
+import { petIconUrl } from "./petIcons"
+
 export type PetGenus = "Cogni" | "Fera" | "Natura" | "Varian" | "Special"
 
 export type CatalogPet = {
   id: string
   name: string
   genus: PetGenus
+  icon: string | null
 }
 
 const RAW: [PetGenus, string][] = [
@@ -220,7 +223,10 @@ function petId(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
 }
 
-export const PETS: CatalogPet[] = RAW.map(([genus, name]) => ({ id: petId(name), name, genus }))
+export const PETS: CatalogPet[] = RAW.map(([genus, name]) => {
+  const id = petId(name)
+  return { id, name, genus, icon: petIconUrl(id) }
+})
 
 const BY_ID = new Map(PETS.map((pet) => [pet.id, pet]))
 const BY_NAME = new Map(PETS.map((pet) => [pet.name.toLowerCase(), pet]))
@@ -233,6 +239,14 @@ export function petById(id: string | null | undefined): CatalogPet | null {
 export function petByName(name: string | null | undefined): CatalogPet | null {
   if (!name?.trim()) return null
   return BY_NAME.get(name.trim().toLowerCase()) ?? null
+}
+
+export const PET_GENERA: PetGenus[] = ["Cogni", "Fera", "Natura", "Varian", "Special"]
+
+export function farmablePetByName(name: string | null | undefined): CatalogPet | null {
+  const pet = petByName(name)
+  if (!pet || pet.genus === "Special") return null
+  return pet
 }
 
 export function soulsToNext(level: number): number | null {

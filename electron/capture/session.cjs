@@ -34,14 +34,16 @@ function createLiveSession({ execPath, helperPath, adapterFile, send }) {
 
   function stopChild() {
     if (!child) return
+    const dying = child
+    dying.closing = true
     closing = true
     try {
-      child.stdin.write(`${JSON.stringify({ cmd: "stop" })}\n`)
+      dying.stdin.write(`${JSON.stringify({ cmd: "stop" })}\n`)
     } catch {
       // process already gone
     }
-    child.kill()
-    child = null
+    dying.kill()
+    if (child === dying) child = null
   }
 
   function startChild() {
@@ -75,6 +77,10 @@ function createLiveSession({ execPath, helperPath, adapterFile, send }) {
     })
     next.on("exit", () => {
       if (child === next) child = null
+      if (next.closing) {
+        if (!child) closing = false
+        return
+      }
       if (closing) {
         closing = false
         return
@@ -110,6 +116,7 @@ function createLiveSession({ execPath, helperPath, adapterFile, send }) {
         })
         return this.snapshot()
       }
+      if (child && phase === "unavailable") stopChild()
       startChild()
       return this.snapshot()
     },
