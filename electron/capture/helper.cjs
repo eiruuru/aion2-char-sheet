@@ -200,6 +200,7 @@ function listenAll() {
         if (gamePort) watch.gamePort += 1
         const hit = findRosterBytes(parsed.payload)
         if (hit && hit !== boundName) {
+          if (boundName) gameStream.rebind()
           lockSource(source)
           boundName = hit
           emit({ type: "character", name: hit })

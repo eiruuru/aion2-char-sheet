@@ -25,6 +25,13 @@ type TrackerBridge = {
   togglePetPopup: () => Promise<boolean>
   onPetVisible: (callback: (open: boolean) => void) => () => void
   closePetPopup: () => Promise<void>
+  getPetChrome: () => Promise<{ opacity: number; locked: boolean }>
+  setPetOpacity: (opacity: number) => Promise<{ opacity: number; locked: boolean }>
+  setPetLocked: (locked: boolean) => Promise<{ opacity: number; locked: boolean }>
+  setPetGoal: (payload: { petId: string; goal: number | null }) => void
+  onPetGoal: (callback: (payload: { petId: string; goal: number | null }) => void) => () => void
+  toggleFarmSession: () => void
+  onPetSession: (callback: () => void) => () => void
   publishPetPopup: (state: unknown) => void
   currentPetPopup: () => Promise<unknown>
   onPetPopup: (callback: (state: unknown) => void) => () => void

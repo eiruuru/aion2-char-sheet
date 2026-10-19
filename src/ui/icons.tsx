@@ -7,6 +7,40 @@ export function MembershipIcon() {
   )
 }
 
+export function OpacityIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="5.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M8 2.8a5.2 5.2 0 0 0 0 10.4Z" fill="currentColor" />
+    </svg>
+  )
+}
+
+export function GoalIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="5.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="8" cy="8" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  )
+}
+
+export function ResizeIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M10.2 13.2h3M13.2 10.2v3M6.6 13.2h1.6M13.2 6.6v1.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function CloseIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4.2 4.2 11.8 11.8M11.8 4.2 4.2 11.8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function PinIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">

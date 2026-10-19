@@ -28,6 +28,7 @@ import { factionName } from "./api/serverList"
 import { rosterOrder } from "./model/suggestions"
 import { CUBE_COST, odyleCap, projectOdyle, shiftOdyleClock, spendOdyleReading, type OdyleProjection } from "./model/odyle"
 import { desktopBridge } from "./desktop"
+import { finishFarmSession, type FarmSession } from "./model/farmSession"
 import { applyLiveEvent, emptyLiveStatus, progressFromTrack, type LiveStatus } from "./model/liveSync"
 import { farmablePetByName, petById, soulsToNext } from "./model/pets"
 import { APP_VERSION, reduceUpdateStatus, UPDATE_SKIP_KEY, WINDOW_TITLE, type UpdateOffer } from "./model/updates"
@@ -74,12 +75,71 @@ export function App() {
   const farmSessionRef = useRef(false)
   const sessionIdsRef = useRef<string[]>([])
   const sessionKillsRef = useRef<Record<string, number>>({})
+  const sessionStartedAtRef = useRef<number | null>(null)
+  const sessionEndedAtRef = useRef<number | null>(null)
+  const [sessionGoals, setSessionGoals] = useState<Record<string, number | null>>({})
+  const [sessionEpoch, setSessionEpoch] = useState(0)
+  const [sessionTick, setSessionTick] = useState(0)
+  const sessionGoalsRef = useRef(sessionGoals)
+  sessionGoalsRef.current = sessionGoals
   selectedIdRef.current = selectedId
   const updateAsked = useRef(false)
   const updateOfferRef = useRef<UpdateOffer | null>(null)
   const storeRef = useRef(store)
   updateOfferRef.current = updateOffer
   storeRef.current = store
+
+  function takeSession(characterId: string | null, ended: number): FarmSession | null {
+    const started = sessionStartedAtRef.current
+    if (!characterId || !started) return null
+    const character = storeRef.current.characters.find((entry) => entry.id === characterId)
+    return {
+      id: `${characterId}:${started}`,
+      characterId,
+      characterName: character?.name ?? "",
+      startedAt: new Date(started).toISOString(),
+      endedAt: new Date(ended).toISOString(),
+      pets: sessionIdsRef.current.map((petId) => ({
+        petId,
+        name: petById(petId)?.name ?? petId,
+        kills: sessionKillsRef.current[petId] ?? 0,
+        goal: sessionGoalsRef.current[petId] ?? null,
+      })),
+    }
+  }
+
+  function endSession(characterId: string | null) {
+    const ended = Date.now()
+    sessionEndedAtRef.current = ended
+    const record = takeSession(characterId, ended)
+    setSessionEpoch((value) => value + 1)
+    if (!record) return
+    const duration = Date.parse(record.endedAt) - Date.parse(record.startedAt)
+    if (!record.pets.length && duration < 1000) return
+    setStore((current) => ({ ...current, farmSessions: finishFarmSession(current.farmSessions ?? [], record) }))
+  }
+
+  function beginSession() {
+    sessionIdsRef.current = []
+    sessionKillsRef.current = {}
+    sessionStartedAtRef.current = Date.now()
+    sessionEndedAtRef.current = null
+    setSessionIds([])
+    setSessionGoals({})
+    setSessionEpoch((value) => value + 1)
+  }
+
+  function toggleFarmSession() {
+    const next = !farmSessionRef.current
+    farmSessionRef.current = next
+    if (next) {
+      beginSession()
+      openFarmWindow()
+    } else {
+      endSession(boundIdRef.current)
+    }
+    setFarmSession(next)
+  }
 
   useEffect(() => {
     saveStore(store)
@@ -154,6 +214,18 @@ export function App() {
   }, [desktop])
 
   useEffect(() => {
+    if (!desktop?.onPetGoal) return
+    return desktop.onPetGoal(({ petId, goal }) => {
+      setSessionGoals((current) => ({ ...current, [petId]: goal }))
+    })
+  }, [desktop])
+
+  useEffect(() => {
+    if (!desktop?.onPetSession) return
+    return desktop.onPetSession(() => toggleFarmSession())
+  }, [desktop])
+
+  useEffect(() => {
     if (liveStatus.phase === "capturing" && liveStatus.boundName && !farmWindowOpened.current) {
       farmWindowOpened.current = true
       openFarmWindow()
@@ -176,14 +248,17 @@ export function App() {
         kills: track.kills,
         next: soulsToNext(track.level),
         sessionKills: sessionKillsRef.current[petId] ?? 0,
+        goal: sessionGoals[petId] ?? null,
       }]
     })
     writePetPopup({
       characterName: character?.name ?? "",
       active: farmSession,
+      startedAt: sessionStartedAtRef.current,
+      endedAt: sessionEndedAtRef.current,
       lines,
     })
-  }, [store, farmSession, sessionIds, farmingCharacter])
+  }, [store, farmSession, sessionIds, farmingCharacter, sessionGoals, sessionEpoch, sessionTick])
 
   useEffect(() => {
     function applyManual(petId: string, level: number, kills: number) {
@@ -207,6 +282,10 @@ export function App() {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== location.origin) return
       const data = event.data as { type?: string; petId?: string; level?: number; kills?: number }
+      if (data?.type === "pet-session") {
+        toggleFarmSession()
+        return
+      }
       if (data?.type !== "pet-save" || typeof data.petId !== "string") return
       if (typeof data.level !== "number" || typeof data.kills !== "number") return
       applyManual(data.petId, data.level, data.kills)
@@ -248,6 +327,11 @@ export function App() {
         const matches = storeRef.current.characters.filter((character) => character.name.toLowerCase() === name)
         const match = matches.find((character) => character.id === boundIdRef.current) ?? matches[0]
         if (!match) return
+        const previous = boundIdRef.current
+        if (previous && previous !== match.id && farmSessionRef.current) {
+          endSession(previous)
+          beginSession()
+        }
         boundIdRef.current = match.id
         setSelectedId(match.id)
         setLiveStatus((status) => ({ ...status, boundName: match.name, phase: status.phase === "off" ? status.phase : "capturing" }))
@@ -265,6 +349,7 @@ export function App() {
           sessionKillsRef.current[pet.id] = (sessionKillsRef.current[pet.id] ?? 0) + 1
         }
         setSessionIds([...sessionIdsRef.current])
+        setSessionTick((value) => value + 1)
         setStore((current) => applyLiveEvent(current, id, { ...event, names }))
         setNow(Date.now())
         if (!farmWindowOpened.current) {
@@ -612,17 +697,7 @@ export function App() {
         farmingName={sessionIds.map((id) => petById(id)?.name).filter((name): name is string => Boolean(name)).join(", ") || null}
         sessionOn={farmSession}
         desktop={Boolean(desktop)}
-        onToggleSession={() => {
-          const next = !farmSessionRef.current
-          farmSessionRef.current = next
-          if (next) {
-            sessionIdsRef.current = []
-            sessionKillsRef.current = {}
-            setSessionIds([])
-            openFarmWindow()
-          }
-          setFarmSession(next)
-        }}
+        onToggleSession={toggleFarmSession}
         onToggle={() => {
           const turningOn = liveStatus.phase === "off" || liveStatus.phase === "needs-npcap" || liveStatus.phase === "unavailable"
           if (!desktop) {
@@ -732,6 +807,7 @@ export function App() {
           projection={projection}
           now={now}
           due={due}
+          sessions={(store.farmSessions ?? []).filter((session) => session.characterId === selected?.id)}
           onSelectCharacter={setSelectedId}
           onSaveOdyle={saveOdyle}
           onSetOdyleTimer={setOdyleTimer}

@@ -422,19 +422,25 @@ function rememberMob(state, id, pet, persist = true) {
   if (!persist || !state.mobFile) return
   if (!state.mobTimes) state.mobTimes = new Map()
   state.mobTimes.set(id, Date.now())
-  const now = Date.now()
-  const rows = []
-  for (const [mobId, at] of state.mobTimes) {
-    if (now - at > 10 * 60 * 1000) continue
-    const name = state.mobs.get(mobId)
-    if (name) rows.push({ id: mobId, pet: name, at })
-  }
-  try {
-    fs.mkdirSync(path.dirname(state.mobFile), { recursive: true })
-    fs.writeFileSync(state.mobFile, JSON.stringify(rows))
-  } catch {
-    // The next spawn writes the names again.
-  }
+  if (state.mobWriteTimer) return
+  const timer = setTimeout(() => {
+    state.mobWriteTimer = null
+    const now = Date.now()
+    const rows = []
+    for (const [mobId, at] of state.mobTimes) {
+      if (now - at > 10 * 60 * 1000) continue
+      const name = state.mobs.get(mobId)
+      if (name) rows.push({ id: mobId, pet: name, at })
+    }
+    try {
+      fs.mkdirSync(path.dirname(state.mobFile), { recursive: true })
+      fs.writeFileSync(state.mobFile, JSON.stringify(rows))
+    } catch {
+      // The next spawn writes the names again.
+    }
+  }, 200)
+  if (typeof timer.unref === "function") timer.unref()
+  state.mobWriteTimer = timer
 }
 
 function loadRememberedMobs(state) {
@@ -458,41 +464,57 @@ function lookupMob(state, id) {
   return state.mobs.get(id) || state.mobs.get(foldActor(id)) || null
 }
 
-function skillTarget(payload, state) {
+const PENDING_MS = 8000
+
+function skillTargets(payload, state) {
   const attacker = readVarint(payload, 2)
-  if (!attacker || !state) return null
+  if (!attacker || !state) return []
   let cursor = 2 + attacker.length
   let marker = false
+  const targets = []
   for (let step = 0; step < 12 && cursor < payload.length; step += 1) {
     const value = readVarint(payload, cursor)
-    if (!value) return null
+    if (!value) break
     cursor += value.length
     if (!marker) {
       if (value.value === 1) marker = true
       continue
     }
-    if (lookupMob(state, value.value)) return value.value
+    if (lookupMob(state, value.value)) targets.push(value.value)
   }
-  return null
+  return targets
 }
 
-function noteCombatLink(payload, state) {
+function creditIfPending(state, found, id) {
+  const at = state.pendingDeaths?.get(id) || 0
+  if (!at || Date.now() - at > PENDING_MS || !state.struck?.has(id)) return
+  const pet = lookupMob(state, id) || state.struck.get(id) || ""
+  if (!pet) return
+  state.pendingDeaths.delete(id)
+  creditOnce(state, found, id, pet)
+}
+
+function noteCombatLink(payload, state, found) {
   if (!state.selfId || !state.struck || !payload || payload.length < 4) return
   if (payload[0] !== 0x02 || payload[1] !== 0x38) return
   const attacker = readVarint(payload, 2)
   if (!attacker) return
   if (!sameActor(attacker.value, state.selfId) && !mineHas(state, attacker.value)) return
-  const target = skillTarget(payload, state)
-  const pet = target ? lookupMob(state, target) : null
-  if (!pet || state.struck.has(target)) return
-  state.struck.set(target, pet)
-  if (state.struck.size > 4000) {
-    const oldest = state.struck.keys().next().value
-    if (oldest != null) state.struck.delete(oldest)
+  for (const target of skillTargets(payload, state)) {
+    const pet = lookupMob(state, target)
+    if (!pet) continue
+    if (!state.struck.has(target)) {
+      state.struck.set(target, pet)
+      if (state.struck.size > 4000) {
+        const oldest = state.struck.keys().next().value
+        if (oldest != null) state.struck.delete(oldest)
+      }
+    }
+    creditIfPending(state, found, target)
   }
 }
 
-function noteOwnHit(payload, state) {
+function noteOwnHit(payload, state, found) {
   if (!state.selfId || !state.struck) return
   const attacker = readVarint(payload, 2)
   if (!attacker || attacker.value <= 0) return
@@ -509,8 +531,8 @@ function noteOwnHit(payload, state) {
     const oldest = state.struck.keys().next().value
     if (oldest != null) state.struck.delete(oldest)
   }
-  if (!pet) return
-  pushTrace(state, { kind: "hit", target: target.value, pet, attacker: attacker.value, selfId: state.selfId || 0, hypothesisId: "C" })
+  if (pet) pushTrace(state, { kind: "hit", target: target.value, pet, attacker: attacker.value, selfId: state.selfId || 0, hypothesisId: "C" })
+  creditIfPending(state, found, target.value)
 }
 
 function rememberMine(state, id) {
@@ -584,7 +606,7 @@ function noteMobPayload(payload, state, names) {
       pushTrace(state, { kind: "spawn", summon: summon.value, code: code || 0, pet, selfId: state.selfId || 0, hypothesisId: "D" })
       if (state.struck?.has(summon.value) && !state.struck.get(summon.value)) state.struck.set(summon.value, pet)
       const pendingAt = state.pendingDeaths?.get(summon.value) || 0
-      if (pendingAt && Date.now() - pendingAt < 30000) {
+      if (pendingAt && Date.now() - pendingAt < PENDING_MS && state.struck?.has(summon.value)) {
         state.pendingDeaths.delete(summon.value)
         creditOnce(state, found, summon.value, pet)
         pushTrace(state, { kind: "late", summon: summon.value, pet, selfId: state.selfId || 0, hypothesisId: "F" })
@@ -622,7 +644,7 @@ function noteMobPayload(payload, state, names) {
       })
     }
     if (mine && pet && dead) creditOnce(state, found, dead.value, pet)
-    else if (dead && counted && struck) {
+    else if (dead && counted) {
       if (!state.pendingDeaths) state.pendingDeaths = new Map()
       state.pendingDeaths.set(dead.value, Date.now())
       if (state.pendingDeaths.size > 4000) {
@@ -631,8 +653,8 @@ function noteMobPayload(payload, state, names) {
       }
     }
   }
-  if (opKey === "0438") noteOwnHit(payload, state)
-  if (opKey === "0238") noteCombatLink(payload, state)
+  if (opKey === "0438") noteOwnHit(payload, state, found)
+  if (opKey === "0238") noteCombatLink(payload, state, found)
   return { names: found, marker: text.marker }
 }
 
@@ -759,6 +781,13 @@ function createGameStream(names, mobFile = "") {
   const state = { selfId: null, mobs: new Map(), mine: new Set(), owners: new Map(), struck: new Map(), pendingDeaths: new Map(), trace: null, mobFile }
   loadRememberedMobs(state)
   return {
+    rebind() {
+      state.selfId = null
+      state.mine = new Set()
+      state.struck = new Map()
+      state.pendingDeaths = new Map()
+      state.credited = new Set()
+    },
     push(meta, marked) {
       if (!meta || meta.proto !== "tcp" || typeof meta.seq !== "number") return { names: [], attempts: 0, appended: 0, marker: false, flow: "" }
       const id = connectionId(meta)

@@ -37,6 +37,7 @@ const decode = require("../../electron/capture/decode.cjs") as {
       trace: { kind: string; dead: number; killer: number; selfId: number; pet: string; mine: boolean } | null
       traces?: { kind: string; pet?: string }[]
     }
+    rebind: () => void
   }
 }
 
@@ -315,5 +316,70 @@ describe("packet discovery", () => {
     push(Buffer.concat([selfHp, sparkie]))
     expect(push(ourCast).names).toEqual([])
     expect(push(mine).names).toEqual(["Giant Sparkie"])
+  })
+
+  it("learns the new character after a switch and ignores the previous actor", () => {
+    const names = ["Giant Sparkie"]
+    const stream = decode.createGameStream(names)
+    const frame = (body: Buffer) => Buffer.concat([Buffer.from([body.length + 4]), body])
+    const firstMob = frame(Buffer.from([0x41, 0x36, 0x10, 0x3c, 0x0e, 0x20, 0x00, 0x40, 0x02]))
+    const secondMob = frame(Buffer.from([0x41, 0x36, 0x14, 0x3c, 0x0e, 0x20, 0x00, 0x40, 0x02]))
+    const thirdMob = frame(Buffer.from([0x41, 0x36, 0x15, 0x3c, 0x0e, 0x20, 0x00, 0x40, 0x02]))
+    const firstSelf = frame(Buffer.from([0x00, 0x8d, 0xb2, 0x0c, 0x01, 0x01]))
+    const nextSelf = frame(Buffer.from([0x00, 0x8d, 0xe9, 0x20, 0x01, 0x01]))
+    const oldHit = frame(Buffer.from([0x04, 0x38, 0xb2, 0x0c, 0x06, 0x00, 0x14]))
+    const oldDeath = frame(Buffer.from([0x42, 0x36, 0x14, 0x00, 0x01]))
+    const nextCast = frame(Buffer.from([0x02, 0x38, 0xe9, 0x20, 0x00, 0x06, 0x01, 0x02, 0x15]))
+    const nextDeath = frame(Buffer.from([0x42, 0x36, 0x15, 0x00, 0x03]))
+    stream.push({
+      proto: "tcp", srcaddr: "10.0.0.8", dstaddr: "10.0.0.9", srcport: 13328, dstport: 50000,
+      seq: 1, flags: 0, payload: Buffer.from("Lunatiq"),
+    }, true)
+    let seq = 20
+    const push = (payload: Buffer) => {
+      const result = stream.push({
+        proto: "tcp", srcaddr: "10.0.0.9", dstaddr: "10.0.0.8", srcport: 50000, dstport: 13328,
+        seq, flags: 0, payload,
+      }, false)
+      seq += payload.length
+      return result
+    }
+    expect(push(Buffer.concat([firstSelf, firstMob])).selfId).toBe(1586)
+    stream.rebind()
+    expect(push(Buffer.concat([secondMob, oldHit, oldDeath])).names).toEqual([])
+    expect(push(Buffer.concat([nextSelf, thirdMob])).selfId).toBe(4201)
+    expect(push(nextCast).names).toEqual([])
+    expect(push(nextDeath).names).toEqual(["Giant Sparkie"])
+  })
+
+  it("counts a second mob when its death arrives before the skill packet", () => {
+    const names = ["Giant Sparkie"]
+    const stream = decode.createGameStream(names)
+    const frame = (body: Buffer) => Buffer.concat([Buffer.from([body.length + 4]), body])
+    const first = frame(Buffer.from([0x41, 0x36, 0x10, 0x3c, 0x0e, 0x20, 0x00, 0x40, 0x02]))
+    const second = frame(Buffer.from([0x41, 0x36, 0x12, 0x3c, 0x0e, 0x20, 0x00, 0x40, 0x02]))
+    const selfHp = frame(Buffer.from([0x00, 0x8d, 0xb2, 0x0c, 0x01, 0x01]))
+    const castFirst = frame(Buffer.from([0x02, 0x38, 0xb2, 0x0c, 0x00, 0x06, 0x01, 0x02, 0x10]))
+    const castBoth = frame(Buffer.from([0x02, 0x38, 0xb2, 0x0c, 0x00, 0x06, 0x01, 0x10, 0x12]))
+    const dieFirst = frame(Buffer.from([0x42, 0x36, 0x10, 0x00, 0x03]))
+    const dieSecond = frame(Buffer.from([0x42, 0x36, 0x12, 0x00, 0x03]))
+    stream.push({
+      proto: "tcp", srcaddr: "10.0.0.8", dstaddr: "10.0.0.9", srcport: 13328, dstport: 50000,
+      seq: 1, flags: 0, payload: Buffer.from("Lunatiq"),
+    }, true)
+    let seq = 20
+    const push = (payload: Buffer) => {
+      const result = stream.push({
+        proto: "tcp", srcaddr: "10.0.0.9", dstaddr: "10.0.0.8", srcport: 50000, dstport: 13328,
+        seq, flags: 0, payload,
+      }, false)
+      seq += payload.length
+      return result
+    }
+    push(Buffer.concat([selfHp, first, second, castFirst]))
+    expect(push(dieFirst).names).toEqual(["Giant Sparkie"])
+    expect(push(dieSecond).names).toEqual([])
+    expect(push(castBoth).names).toEqual(["Giant Sparkie"])
+    expect(push(dieSecond).names).toEqual([])
   })
 })

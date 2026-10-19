@@ -4,6 +4,8 @@ import { parseStoredNumber } from "../model/store"
 import { formatCountdown, formatNumber } from "../model/format"
 import { CUBE_COST, type OdyleProjection } from "../model/odyle"
 import { rosterGoals, type SessionItem } from "../model/checklist"
+import type { FarmSession } from "../model/farmSession"
+import { FarmSessionList } from "./FarmSessions"
 import { RefreshIcon } from "./icons"
 import { loadVideos, type VideoHit } from "../model/videos"
 
@@ -12,6 +14,7 @@ export function GoalsPanel({
   projection,
   now,
   due,
+  sessions,
   onSelectCharacter,
   onSaveOdyle,
   onSetOdyleTimer,
@@ -21,12 +24,13 @@ export function GoalsPanel({
   projection: OdyleProjection | null
   now: number
   due: SessionItem[]
+  sessions: FarmSession[]
   onSelectCharacter: (characterId: string) => void
   onSaveOdyle: (amount: number) => void
   onSetOdyleTimer: (remainingMs: number) => void
   onSpendCube: () => void
 }) {
-  const [tab, setTab] = useState<"goals" | "class" | "general">("goals")
+  const [tab, setTab] = useState<"goals" | "sessions" | "class" | "general">("goals")
   const goals = rosterGoals(due, character?.id ?? null, projection, now)
   return (
     <aside className="side-column" data-tour="goals">
@@ -43,11 +47,14 @@ export function GoalsPanel({
       <section className="goals panel">
         <div className="tabs" role="tablist" aria-label="Goals">
           <button type="button" role="tab" aria-selected={tab === "goals"} onClick={() => setTab("goals")}>Goals</button>
+          <button type="button" role="tab" aria-selected={tab === "sessions"} onClick={() => setTab("sessions")}>Sessions</button>
           <button type="button" role="tab" aria-selected={tab === "class"} onClick={() => setTab("class")}>Class Guides</button>
           <button type="button" role="tab" aria-selected={tab === "general"} onClick={() => setTab("general")}>General Guides</button>
         </div>
         <div className="goals-scroll">
-          {tab === "class" || tab === "general" ? (
+          {tab === "sessions" ? (
+            <FarmSessionList sessions={sessions} />
+          ) : tab === "class" || tab === "general" ? (
             <VideosView kind={tab} character={character} active />
           ) : (
             goals.length ? (

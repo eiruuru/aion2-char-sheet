@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification } = require("electron")
+const { app, BrowserWindow, ipcMain, Notification, screen } = require("electron")
 const { createLiveSession } = require("./capture/session.cjs")
 
 if (app.isPackaged) app.setName("Aion 2 Progress")
@@ -9,6 +9,7 @@ const path = require("path")
 
 const SAVE_NAME = "aion2-tracker.json"
 const WINDOW_NAME = "aion2-window.json"
+const PET_WINDOW_NAME = "aion2-pet-window.json"
 
 function savePath(name) {
   return path.join(app.getPath("userData"), name)
@@ -130,6 +131,77 @@ function startServer(root) {
 let windowRef = null
 let petWindow = null
 let petPopupState = null
+let petChrome = { opacity: 1, locked: false, x: null, y: null, width: null, height: null }
+
+function petCoordinate(value) {
+  const number = Number(value)
+  return Number.isFinite(number) ? Math.round(number) : null
+}
+
+function petSpan(value, min, max) {
+  const number = petCoordinate(value)
+  if (number == null) return null
+  return Math.min(max, Math.max(min, number))
+}
+
+function readPetChrome() {
+  try {
+    const raw = JSON.parse(readText(savePath(PET_WINDOW_NAME)) || "")
+    const opacity = Number(raw?.opacity)
+    return {
+      opacity: Number.isFinite(opacity) ? Math.min(1, Math.max(0.35, opacity)) : 1,
+      locked: Boolean(raw?.locked),
+      x: petCoordinate(raw?.x),
+      y: petCoordinate(raw?.y),
+      width: petSpan(raw?.width, 340, 1600),
+      height: petSpan(raw?.height, 220, 1200),
+    }
+  } catch {
+    return { opacity: 1, locked: false, x: null, y: null, width: null, height: null }
+  }
+}
+
+function applyPetChrome() {
+  if (!petWindow || petWindow.isDestroyed()) return
+  petWindow.setOpacity(petChrome.opacity)
+  if (typeof petWindow.setMovable === "function") petWindow.setMovable(!petChrome.locked)
+}
+
+function writePetChrome(next) {
+  petChrome = {
+    opacity: Math.min(1, Math.max(0.35, Number(next?.opacity) || 1)),
+    locked: Boolean(next?.locked),
+    x: petCoordinate(next?.x),
+    y: petCoordinate(next?.y),
+    width: petSpan(next?.width, 340, 1600),
+    height: petSpan(next?.height, 220, 1200),
+  }
+  writeText(savePath(PET_WINDOW_NAME), JSON.stringify(petChrome))
+  applyPetChrome()
+}
+
+function petPlace() {
+  if (!petChrome.locked || petChrome.x == null || petChrome.y == null) return {}
+  const { x, y } = petChrome
+  const visible = screen.getAllDisplays().some((display) => {
+    const area = display.workArea
+    return x + 80 > area.x && x < area.x + area.width && y + 40 > area.y && y < area.y + area.height
+  })
+  return visible ? { x, y } : {}
+}
+
+function petSize() {
+  if (!petChrome.locked || petChrome.width == null || petChrome.height == null) return { width: 400, height: 320 }
+  return { width: petChrome.width, height: petChrome.height }
+}
+
+function rememberPetBounds() {
+  if (!petWindow || petWindow.isDestroyed() || !petChrome.locked) return
+  const [x, y] = petWindow.getPosition()
+  const [width, height] = petWindow.getSize()
+  if (petChrome.x === x && petChrome.y === y && petChrome.width === width && petChrome.height === height) return
+  writePetChrome({ ...petChrome, x, y, width, height })
+}
 let appPort = 0
 let stopLiveSync = () => {}
 
@@ -192,12 +264,17 @@ function openPetWindow(focus = false) {
     tellPetVisible(true)
     return true
   }
+  const place = petPlace()
+  const size = petSize()
   petWindow = new BrowserWindow({
-    width: 360,
-    height: 280,
+    ...size,
+    minWidth: 340,
+    minHeight: 220,
+    ...place,
+    show: false,
     frame: false,
     alwaysOnTop: true,
-    resizable: false,
+    resizable: true,
     minimizable: false,
     maximizable: false,
     skipTaskbar: true,
@@ -209,11 +286,21 @@ function openPetWindow(focus = false) {
       nodeIntegration: false,
     },
   })
+  petWindow.on("moved", rememberPetBounds)
+  petWindow.on("resized", rememberPetBounds)
+  petWindow.on("close", rememberPetBounds)
   petWindow.on("closed", () => {
     petWindow = null
     tellPetVisible(false)
   })
   void petWindow.loadURL(`http://127.0.0.1:${appPort}/#pet`)
+  applyPetChrome()
+  if (petChrome.locked) {
+    petWindow.setBounds({
+      ...size,
+      ...(place.x != null && place.y != null ? place : {}),
+    })
+  }
   raisePetWindow(focus)
   tellPetVisible(true)
   return true
@@ -254,6 +341,7 @@ function ensureUpdater() {
 app.whenReady().then(async () => {
   adoptLegacySave(SAVE_NAME)
   adoptLegacySave(WINDOW_NAME)
+  petChrome = readPetChrome()
   const root = path.join(app.getAppPath(), "dist")
   const { port } = await startServer(root)
   appPort = port
@@ -334,20 +422,36 @@ app.whenReady().then(async () => {
     if (petWindow && !petWindow.isDestroyed()) petWindow.close()
     return false
   })
+  ipcMain.handle("pet-pop:chrome", () => petChrome)
+  ipcMain.handle("pet-pop:opacity", (_event, opacity) => {
+    writePetChrome({ ...petChrome, opacity })
+    return petChrome
+  })
+  ipcMain.handle("pet-pop:lock", (_event, locked) => {
+    writePetChrome({ ...petChrome, locked: Boolean(locked) })
+    if (petChrome.locked) rememberPetBounds()
+    return petChrome
+  })
   ipcMain.handle("pet-pop:current", () => petPopupState)
   ipcMain.on("pet-pop:state", (_event, state) => {
     petPopupState = state ?? null
     if (petWindow && !petWindow.isDestroyed()) {
-      const lines = Array.isArray(state?.lines) ? state.lines.length : 0
-      const height = Math.min(720, 188 + Math.max(lines, 1) * 92)
-      const [width] = petWindow.getSize()
-      petWindow.setSize(width, height)
       petWindow.webContents.send("pet-pop:state", petPopupState)
     }
   })
   ipcMain.on("pet-pop:save", (event, payload) => {
     if (petWindow && event.sender === petWindow.webContents) {
       windowRef?.webContents.send("pet-pop:save", payload)
+    }
+  })
+  ipcMain.on("pet-pop:goal", (event, payload) => {
+    if (petWindow && event.sender === petWindow.webContents) {
+      windowRef?.webContents.send("pet-pop:goal", payload)
+    }
+  })
+  ipcMain.on("pet-pop:session", (event) => {
+    if (petWindow && event.sender === petWindow.webContents) {
+      windowRef?.webContents.send("pet-pop:session")
     }
   })
 })

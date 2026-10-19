@@ -32,6 +32,11 @@ contextBridge.exposeInMainWorld("tracker", {
     return () => ipcRenderer.removeListener("pet-pop:visible", listener)
   },
   closePetPopup: () => ipcRenderer.invoke("pet-pop:close"),
+  getPetChrome: () => ipcRenderer.invoke("pet-pop:chrome"),
+  setPetOpacity: (opacity) => ipcRenderer.invoke("pet-pop:opacity", opacity),
+  setPetLocked: (locked) => ipcRenderer.invoke("pet-pop:lock", locked),
+  setPetGoal: (payload) => ipcRenderer.send("pet-pop:goal", payload),
+  toggleFarmSession: () => ipcRenderer.send("pet-pop:session"),
   publishPetPopup: (state) => ipcRenderer.send("pet-pop:state", state),
   currentPetPopup: () => ipcRenderer.invoke("pet-pop:current"),
   onPetPopup: (callback) => {
@@ -44,5 +49,15 @@ contextBridge.exposeInMainWorld("tracker", {
     const listener = (_event, payload) => callback(payload)
     ipcRenderer.on("pet-pop:save", listener)
     return () => ipcRenderer.removeListener("pet-pop:save", listener)
+  },
+  onPetGoal: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on("pet-pop:goal", listener)
+    return () => ipcRenderer.removeListener("pet-pop:goal", listener)
+  },
+  onPetSession: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on("pet-pop:session", listener)
+    return () => ipcRenderer.removeListener("pet-pop:session", listener)
   },
 })

@@ -3,6 +3,7 @@ import { emptyProgress, migrateSharedKeys, syncProgress, type ChecklistProgress 
 import type { OdyleReading } from "./odyle"
 import { normalizePetProgress, normalizePetTracks, seedTrackFromProgress, type PetProgress, type PetTrack } from "./petProgress"
 import { petById } from "./pets"
+import { normalizeFarmSessions, type FarmSession } from "./farmSession"
 import { historySnapshot, type Snapshot } from "./snapshot"
 
 export type Resources = {
@@ -39,6 +40,7 @@ export type StoreData = {
   characters: CharacterRecord[]
   checklist?: ChecklistProgress
   selectedId?: string
+  farmSessions?: FarmSession[]
 }
 
 const STORAGE_KEY = "aion2-tracker-v1"
@@ -71,6 +73,7 @@ export function normalizeStore(store: StoreData, now = Date.now()): StoreData {
     characters: store.characters.map((character) => normalizeCharacterPets(character)),
     checklist: migrateSharedKeys(syncProgress(store.checklist ?? emptyProgress(now), now), store.characters),
     selectedId: typeof store.selectedId === "string" && store.selectedId ? store.selectedId : undefined,
+    farmSessions: normalizeFarmSessions(store.farmSessions),
   }
 }
 

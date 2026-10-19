@@ -1,7 +1,7 @@
 {
   "name": "aion2-tracker",
   "private": true,
-  "version": "0.10.0",
+  "version": "0.11.0",
   "license": "GPL-3.0-only",
   "description": "Local Aion 2 character sheet. Public profiles supply gear, skills, and Daevanion. Dailies, goals, and the Odyle clock stay on this device.",
   "type": "module",
@@ -63,7 +63,7 @@
     ],
     "afterPack": "electron/after-pack.cjs",
     "releaseInfo": {
-      "releaseNotes": "Live Sync counts farmable pet kills for the logged-in character while a session is on. The moon button opens a progress window that stays above other windows."
+      "releaseNotes": "Close kills stay counted. A pinned pet window keeps its place and size, and finished sessions stay on the Pets screen."
     },
     "publish": {
       "provider": "github",
