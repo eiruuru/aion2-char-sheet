@@ -327,11 +327,6 @@ export function App() {
         const matches = storeRef.current.characters.filter((character) => character.name.toLowerCase() === name)
         const match = matches.find((character) => character.id === boundIdRef.current) ?? matches[0]
         if (!match) return
-        const previous = boundIdRef.current
-        if (previous && previous !== match.id && farmSessionRef.current) {
-          endSession(previous)
-          beginSession()
-        }
         boundIdRef.current = match.id
         setSelectedId(match.id)
         setLiveStatus((status) => ({ ...status, boundName: match.name, phase: status.phase === "off" ? status.phase : "capturing" }))

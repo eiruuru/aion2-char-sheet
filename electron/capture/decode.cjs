@@ -485,12 +485,28 @@ function skillTargets(payload, state) {
   return targets
 }
 
+function rememberStruck(state, id, pet) {
+  if (!state.struck || !id) return
+  state.struck.set(id, pet)
+  const folded = foldActor(id)
+  if (folded !== id) state.struck.set(folded, pet)
+  if (state.struck.size > 4000) {
+    const oldest = state.struck.keys().next().value
+    if (oldest != null) state.struck.delete(oldest)
+  }
+}
+
+function struckHas(state, id) {
+  return Boolean(id && state.struck && (state.struck.has(id) || state.struck.has(foldActor(id))))
+}
+
 function creditIfPending(state, found, id) {
-  const at = state.pendingDeaths?.get(id) || 0
-  if (!at || Date.now() - at > PENDING_MS || !state.struck?.has(id)) return
-  const pet = lookupMob(state, id) || state.struck.get(id) || ""
+  const at = state.pendingDeaths?.get(id) || state.pendingDeaths?.get(foldActor(id)) || 0
+  if (!at || Date.now() - at > PENDING_MS || !struckHas(state, id)) return
+  const pet = lookupMob(state, id) || state.struck.get(id) || state.struck.get(foldActor(id)) || ""
   if (!pet) return
   state.pendingDeaths.delete(id)
+  state.pendingDeaths.delete(foldActor(id))
   creditOnce(state, found, id, pet)
 }
 
@@ -503,13 +519,7 @@ function noteCombatLink(payload, state, found) {
   for (const target of skillTargets(payload, state)) {
     const pet = lookupMob(state, target)
     if (!pet) continue
-    if (!state.struck.has(target)) {
-      state.struck.set(target, pet)
-      if (state.struck.size > 4000) {
-        const oldest = state.struck.keys().next().value
-        if (oldest != null) state.struck.delete(oldest)
-      }
-    }
+    if (!struckHas(state, target)) rememberStruck(state, target, pet)
     creditIfPending(state, found, target)
   }
 }
@@ -524,14 +534,12 @@ function noteOwnHit(payload, state, found) {
   const gap = readVarint(payload, 2 + attacker.length + skill.length)
   if (!gap) return
   const target = readVarint(payload, 2 + attacker.length + skill.length + gap.length)
-  if (!target || target.value <= 0 || state.struck.has(target.value)) return
+  if (!target || target.value <= 0) return
   const pet = lookupMob(state, target.value) || ""
-  state.struck.set(target.value, pet)
-  if (state.struck.size > 4000) {
-    const oldest = state.struck.keys().next().value
-    if (oldest != null) state.struck.delete(oldest)
+  if (!struckHas(state, target.value)) {
+    rememberStruck(state, target.value, pet)
+    if (pet) pushTrace(state, { kind: "hit", target: target.value, pet, attacker: attacker.value, selfId: state.selfId || 0, hypothesisId: "C" })
   }
-  if (pet) pushTrace(state, { kind: "hit", target: target.value, pet, attacker: attacker.value, selfId: state.selfId || 0, hypothesisId: "C" })
   creditIfPending(state, found, target.value)
 }
 
@@ -560,7 +568,15 @@ function pushTrace(state, trace) {
 
 function learnSelf(state, id) {
   if (!id) return
-  if (!state.selfId) state.selfId = id
+  if (state.selfId && !sameActor(state.selfId, id)) {
+    state.selfId = id
+    state.mine = new Set()
+    state.struck = new Map()
+    state.pendingDeaths = new Map()
+    state.credited = new Set()
+  } else if (!state.selfId) {
+    state.selfId = id
+  }
   adoptSummons(state)
 }
 
@@ -604,10 +620,11 @@ function noteMobPayload(payload, state, names) {
       state.farm = (state.farm || 0) + 1
       rememberMob(state, summon.value, pet)
       pushTrace(state, { kind: "spawn", summon: summon.value, code: code || 0, pet, selfId: state.selfId || 0, hypothesisId: "D" })
-      if (state.struck?.has(summon.value) && !state.struck.get(summon.value)) state.struck.set(summon.value, pet)
-      const pendingAt = state.pendingDeaths?.get(summon.value) || 0
-      if (pendingAt && Date.now() - pendingAt < PENDING_MS && state.struck?.has(summon.value)) {
+      if (struckHas(state, summon.value) && !state.struck.get(summon.value)) rememberStruck(state, summon.value, pet)
+      const pendingAt = state.pendingDeaths?.get(summon.value) || state.pendingDeaths?.get(foldActor(summon.value)) || 0
+      if (pendingAt && Date.now() - pendingAt < PENDING_MS && struckHas(state, summon.value)) {
         state.pendingDeaths.delete(summon.value)
+        state.pendingDeaths.delete(foldActor(summon.value))
         creditOnce(state, found, summon.value, pet)
         pushTrace(state, { kind: "late", summon: summon.value, pet, selfId: state.selfId || 0, hypothesisId: "F" })
       }
@@ -627,7 +644,7 @@ function noteMobPayload(payload, state, names) {
     const flag = killer ? readVarint(payload, 2 + dead.length + killer.length) : null
     const pet = dead ? lookupMob(state, dead.value) : null
     const counted = Boolean(flag && (flag.value === 1 || flag.value === 3))
-    const struck = Boolean(dead && state.struck?.has(dead.value))
+    const struck = Boolean(dead && struckHas(state, dead.value))
     const mine = Boolean(pet && counted && struck)
     if ((state.deathLogs || 0) < 12) {
       state.deathLogs = (state.deathLogs || 0) + 1
