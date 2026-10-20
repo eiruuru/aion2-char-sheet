@@ -99,6 +99,7 @@ button.quiet { background: transparent; color: var(--text); border: 1px solid va
   gap: 1rem;
   align-items: start;
 }
+.workspace.guide-wide { grid-template-columns: minmax(0, 1fr); }
 .character-column {
   min-width: 0;
   display: grid;
@@ -134,6 +135,61 @@ button.quiet { background: transparent; color: var(--text); border: 1px solid va
 }
 .goals > .tabs { flex: none; margin-bottom: 0; }
 .video-pane { display: grid; gap: 1.15rem; padding: 0.45rem 0.2rem 0.65rem; min-width: 0; }
+.character-view { display: flex; flex-direction: column; gap: 1rem; min-width: 0; min-height: 0; }
+.view-tabs { margin: 0; }
+.class-sheet {
+  display: grid;
+  grid-template-columns: minmax(180px, 25%) minmax(0, 1fr);
+  gap: 1rem;
+  min-width: 0;
+  min-height: 0;
+}
+.improve-card { display: flex; flex-direction: column; gap: 0.85rem; min-height: 0; }
+.improve-card h2 { margin: 0; font-size: 1rem; }
+.improve-list { display: grid; gap: 0.4rem; }
+.improve-list button { text-align: left; background: transparent; border: 1px solid var(--line); }
+.improve-list button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.guide-results { display: flex; flex-direction: column; gap: 1.15rem; min-width: 0; min-height: 0; padding: 1.2rem 1.25rem 1.35rem; }
+.guide-toolbar { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; margin-bottom: 0.35rem; }
+.guide-scroll { overflow: auto; flex: 1; min-height: 0; display: grid; gap: 1.6rem; align-content: start; padding: 0.2rem 0.45rem 1.2rem 0.15rem; }
+.guide-scroll p, .tactics p { margin: 0; }
+.tier-group { display: grid; gap: 1rem; }
+.tier-group h3 { display: flex; align-items: baseline; gap: 0.45rem; margin: 0; font-size: 0.95rem; }
+.priority-modes { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.priority-modes button { background: transparent; color: var(--text); border: 1px solid var(--line); }
+.priority-modes button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.priority-situation { display: grid; gap: 0.35rem; color: var(--muted); }
+.priority-role { font-weight: 650; }
+.priority-skills { list-style: none; padding: 0.15rem; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.15rem; }
+.improve-list { overflow: auto; min-height: 0; padding-right: 0.15rem; }
+.skill-card {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+  margin: 0;
+  padding: 1.15rem 1.2rem 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.skill-card > div { display: grid; gap: 0.45rem; min-width: 0; }
+.skill-card img, .tier-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: #161616;
+  object-fit: cover;
+}
+.tier-badge { display: grid; place-items: center; font-weight: 700; }
+.skill-description { margin: 0.15rem 0 0; line-height: 1.55; white-space: pre-wrap; }
+.priority-skill-line { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; }
+.priority-why { margin: 0; line-height: 1.5; }
+.priority-credit { font-size: 0.85rem; }
+.tier-mark { min-width: 0.9rem; }
+.tier-s { color: #f3d7a1; }
+.tier-a { color: #e9a43a; }
+.tier-b, .tier-c, .tier-unknown { color: var(--muted); }
 .video-head { display: flex; align-items: center; justify-content: flex-end; min-height: 2rem; }
 .video-head .icon-button { flex: none; }
 .video-pane > .muted { margin: 0; }
@@ -213,6 +269,7 @@ button.quiet { background: transparent; color: var(--text); border: 1px solid va
   color: var(--muted);
 }
 .live-note { margin: 0; display: grid; gap: 0.45rem; }
+.live-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.65rem; margin: 0 0 0.9rem; }
 .live-strip {
   display: flex;
   align-items: center;
@@ -220,7 +277,7 @@ button.quiet { background: transparent; color: var(--text); border: 1px solid va
   gap: 0.35rem 1rem;
   width: fit-content;
   max-width: 100%;
-  margin: 0 0 0.9rem;
+  margin: 0;
   padding: 0.4rem 0.55rem 0.4rem 0.85rem;
   background: #12160f;
   border: 1px solid #243024;
@@ -259,6 +316,7 @@ button.quiet { background: transparent; color: var(--text); border: 1px solid va
   background: transparent;
   color: var(--text);
 }
+.live-views { display: inline-flex; align-items: center; gap: 0.35rem; margin-left: 0.15rem; }
 .live-moon svg { width: 0.95rem; height: 0.95rem; }
 .live-moon.open { background: #243024; border-color: #3ddc6a; color: #d7f5df; }
 .live-find {
@@ -1299,9 +1357,16 @@ button.tick.unused:disabled { opacity: 1; }
   .character-column > .roster-bar,
   .character-column > .detail,
   .character-column > .empty { flex: none; }
+  .character-column > .character-view { flex: 1; min-height: 0; overflow: hidden; }
+  .character-view > .view-tabs,
+  .character-view > .detail { flex: none; }
+  .character-view > .class-sheet,
+  .character-view > .content-row { flex: 1; min-height: 0; }
+  .class-sheet > .panel { min-height: 0; overflow: hidden; }
   .character-column > .add-card { flex: 1; }
   .character-column:has(.add-card) > .detail,
   .character-column:has(.add-card) > .content-row,
+  .character-column:has(.add-card) > .character-view,
   .character-column:has(.add-card) > .empty { display: none; }
   .content-row {
     flex: 1;
@@ -1338,7 +1403,7 @@ button.tick.unused:disabled { opacity: 1; }
 
 @media (max-width: 960px) {
   .add-card { max-height: 70vh; }
-  .workspace, .content-row { grid-template-columns: minmax(0, 1fr); }
+  .workspace, .content-row, .class-sheet { grid-template-columns: minmax(0, 1fr); }
   .side-column { height: auto; overflow: visible; }
   .goals { max-height: 70vh; overflow: hidden; }
   .goals-scroll { flex: 1; }

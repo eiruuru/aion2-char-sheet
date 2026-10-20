@@ -1,7 +1,7 @@
 {
   "name": "aion2-tracker",
   "private": true,
-  "version": "0.11.1",
+  "version": "0.12.0",
   "license": "GPL-3.0-only",
   "description": "Local Aion 2 character sheet. Public profiles supply gear, skills, and Daevanion. Dailies, goals, and the Odyle clock stay on this device.",
   "type": "module",
@@ -63,7 +63,7 @@
     ],
     "afterPack": "electron/after-pack.cjs",
     "releaseInfo": {
-      "releaseNotes": "Farm kills keep counting when another roster name shows up in packets. The session no longer restarts on that."
+      "releaseNotes": "Class guide for the selected character, with skill icons stored in the app. Skills, stigmas, macros, and combat tips come from aion2vault.com."
     },
     "publish": {
       "provider": "github",

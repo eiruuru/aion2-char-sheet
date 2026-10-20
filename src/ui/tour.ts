@@ -72,6 +72,12 @@ export function visibleSteps(context: TourContext): TourStep[] {
         target: "build",
         body: "Gear, Skills, Daevanion, and Cosmetics are on these tabs.",
       },
+      {
+        id: "guide",
+        title: "Class guide",
+        target: "view",
+        body: "Guide switches this area to the class priorities for whoever is selected. Sheet brings the character back.",
+      },
     )
   }
   steps.push({

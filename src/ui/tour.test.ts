@@ -46,7 +46,7 @@ describe("onboarding steps", () => {
 
   it("shows the sheet steps when a character is selected", () => {
     const steps = visibleSteps({ hasCharacter: true, desktop: true })
-    expect(steps.map((step) => step.id)).toEqual(["welcome", "roster", "tools", "profile", "tasks", "build", "goals"])
+    expect(steps.map((step) => step.id)).toEqual(["welcome", "roster", "tools", "profile", "tasks", "build", "guide", "goals"])
     expect(steps[0]?.target).toBeUndefined()
     expect(steps.find((step) => step.id === "roster")?.body).not.toContain("after someone is added")
     expect(steps.find((step) => step.id === "tools")?.body).toContain("pin")
@@ -54,7 +54,7 @@ describe("onboarding steps", () => {
 
   it("shows the full sheet for an unsaved example", () => {
     const steps = visibleSteps({ hasCharacter: false, desktop: false, preview: true })
-    expect(steps.map((step) => step.id)).toEqual(["welcome", "roster", "tools", "profile", "tasks", "build", "goals"])
+    expect(steps.map((step) => step.id)).toEqual(["welcome", "roster", "tools", "profile", "tasks", "build", "guide", "goals"])
     expect(steps.find((step) => step.id === "roster")?.body).toContain("not saved")
   })
 

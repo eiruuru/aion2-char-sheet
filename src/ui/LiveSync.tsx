@@ -1,4 +1,5 @@
 import type { LiveStatus } from "../model/liveSync"
+import { GuideIcon, SheetIcon } from "./icons"
 
 function streamState(status: LiveStatus, desktop: boolean): { text: string; tone: "found" | "looking" | "idle" } {
   if (!desktop) return { text: "in the Windows app", tone: "idle" }
@@ -21,6 +22,8 @@ export function LiveStatusStrip({
   farmOpen,
   onToggleFarm,
   onFindAdapter,
+  view,
+  onView,
 }: {
   status: LiveStatus
   characterName: string | null
@@ -33,9 +36,12 @@ export function LiveStatusStrip({
   farmOpen: boolean
   onToggleFarm: () => void
   onFindAdapter: () => void
+  view: "sheet" | "guide"
+  onView: (view: "sheet" | "guide") => void
 }) {
   const stream = streamState(status, desktop)
   return (
+    <div className="live-row">
     <div className="live-strip" role="status">
       <button
         type="button"
@@ -63,12 +69,21 @@ export function LiveStatusStrip({
         <span className="live-dot" />
         Farming: {farmingName || "—"}
       </button>
-      <button type="button" className={farmOpen ? "live-moon open" : "live-moon"} aria-pressed={farmOpen} aria-label={farmOpen ? "Close pet progress" : "Open pet progress"} title={farmOpen ? "Close pet progress" : "Open pet progress"} onClick={onToggleFarm}>
-        <MoonIcon />
-      </button>
       {status.phase === "needs-adapter" ? (
         <button type="button" className="live-find" onClick={onFindAdapter}>Find adapter</button>
       ) : null}
+    </div>
+      <div className="live-views" role="group" aria-label="Character view" data-tour="view">
+        <button type="button" className={view === "sheet" ? "live-moon open" : "live-moon"} aria-pressed={view === "sheet"} aria-label="Character sheet" title="Character sheet" onClick={() => onView("sheet")}>
+          <SheetIcon />
+        </button>
+        <button type="button" className={view === "guide" ? "live-moon open" : "live-moon"} aria-pressed={view === "guide"} aria-label="Class guide" title="Class guide" onClick={() => onView("guide")}>
+          <GuideIcon />
+        </button>
+      </div>
+      <button type="button" className={farmOpen ? "live-moon open" : "live-moon"} aria-pressed={farmOpen} aria-label={farmOpen ? "Close pet progress" : "Open pet progress"} title={farmOpen ? "Close pet progress" : "Open pet progress"} onClick={onToggleFarm}>
+        <MoonIcon />
+      </button>
     </div>
   )
 }

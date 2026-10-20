@@ -94,6 +94,24 @@ export function RefreshIcon() {
   )
 }
 
+export function SheetIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="3.2" y="2.2" width="9.6" height="11.6" rx="1.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M5.6 5.4h4.8M5.6 8h4.8M5.6 10.6h3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function GuideIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3.2 3.2h4.2A2.2 2.2 0 0 1 9.6 5.4v7.4H5.4A2.2 2.2 0 0 0 3.2 10.6Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M12.8 3.2H8.6A2.2 2.2 0 0 0 6.4 5.4v7.4h4.2a2.2 2.2 0 0 0 2.2-2.2Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function StarIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">

@@ -34,6 +34,7 @@ import { farmablePetByName, petById, soulsToNext } from "./model/pets"
 import { APP_VERSION, reduceUpdateStatus, UPDATE_SKIP_KEY, WINDOW_TITLE, type UpdateOffer } from "./model/updates"
 import { AddCharacter } from "./ui/AddCharacter"
 import { CharacterPanel } from "./ui/CharacterPanel"
+import { ClassGuide } from "./ui/ClassGuide"
 import { GoalsPanel } from "./ui/Goals"
 import { LiveStatusStrip } from "./ui/LiveSync"
 import { ExportIcon, ImportIcon, MembershipIcon, PinIcon, TrashIcon, UpdateIcon } from "./ui/icons"
@@ -59,6 +60,7 @@ export function App() {
   const [error, setError] = useState("")
   const [adding, setAdding] = useState(false)
   const [focusToken, setFocusToken] = useState(0)
+  const [view, setView] = useState<"sheet" | "guide">("sheet")
   const [now, setNow] = useState(() => Date.now())
   const [aboveGame, setAboveGame] = useState(false)
   const [tourOpen, setTourOpen] = useState(() => shouldOpenOnboarding(loadStore().characters.length, readOnboardingSeen(localStorage)))
@@ -511,6 +513,7 @@ export function App() {
       return { ...current, checklist }
     })
   }
+
   function makeMain() {
     if (!selected || selected.id === SAMPLE_ID) return
     setStore((current) => ({
@@ -718,6 +721,8 @@ export function App() {
           toggleFarmWindow()
         }}
         onFindAdapter={() => { void desktop?.findAdapter() }}
+        view={view}
+        onView={setView}
       />
       {updateNotice ? <p className="muted update-status">{updateNotice}</p> : null}
       {updateOffer ? (
@@ -741,7 +746,7 @@ export function App() {
         </section>
       ) : null}
       {error ? <p className="error banner">{error}</p> : null}
-      <div className="workspace">
+      <div className={view === "guide" ? "workspace guide-wide" : "workspace"}>
         <div className="character-column">
           <section className="roster-bar panel" data-tour="roster">
             {rosterGroups(ordered).map((group) => (
@@ -776,19 +781,23 @@ export function App() {
           </section>
           {adding ? <AddCharacter onAdd={addCharacter} focusToken={focusToken} /> : null}
           {selected ? (
-            <CharacterPanel
-              character={selected}
-              busy={busyId === selected.id}
-              onRefresh={() => void refreshRecord(selected)}
-              onDelete={removeSelected}
-              onSetMain={makeMain}
-              checklistRows={checklistRows}
-              names={names}
-              roles={roles}
-              onChecklistBoxes={changeBoxes}
-              onChecklistBank={changeBank}
-              now={now}
-            />
+            <div className="character-view">
+              {view === "guide" ? <ClassGuide character={selected} /> : (
+                <CharacterPanel
+                  character={selected}
+                  busy={busyId === selected.id}
+                  onRefresh={() => void refreshRecord(selected)}
+                  onDelete={removeSelected}
+                  onSetMain={makeMain}
+                  checklistRows={checklistRows}
+                  names={names}
+                  roles={roles}
+                  onChecklistBoxes={changeBoxes}
+                  onChecklistBank={changeBank}
+                  now={now}
+                />
+              )}
+            </div>
           ) : (
             <section className="panel empty">
               <h2>Your characters, on this device</h2>
@@ -797,7 +806,8 @@ export function App() {
             </section>
           )}
         </div>
-        <GoalsPanel
+        {view === "guide" ? null : (
+          <GoalsPanel
           character={selected}
           projection={projection}
           now={now}
@@ -807,7 +817,8 @@ export function App() {
           onSaveOdyle={saveOdyle}
           onSetOdyleTimer={setOdyleTimer}
           onSpendCube={spendCube}
-        />
+          />
+        )}
       </div>
       {tourOpen ? (
         <Onboarding
